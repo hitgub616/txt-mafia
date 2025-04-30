@@ -490,6 +490,7 @@ export default function Room() {
       currentPlayerId: localStorage.getItem('playerId'),
       playerCount: players.length,
       canStart,
+      isHost: players[0]?.id === playerId,
       timestamp: new Date().toISOString()
     });
 
@@ -502,6 +503,13 @@ export default function Room() {
     if (!currentPlayerId) {
       console.error('게임 시작 실패: playerId가 없습니다.');
       alert('플레이어 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+      return;
+    }
+
+    // 방장 체크 추가
+    if (players[0]?.id !== currentPlayerId) {
+      console.error('게임 시작 실패: 방장이 아닙니다.');
+      alert('게임은 방장만 시작할 수 있습니다.');
       return;
     }
 
@@ -844,14 +852,20 @@ export default function Room() {
                 )}
                 {status === 'waiting' && (
                   <div className="mt-4">
-                    <button
-                      id="startGameButton"
-                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors duration-300"
-                      onClick={startGame}
-                      disabled={!canStart}
-                    >
-                      게임 시작 {!canStart && `(${players.length}/4)`}
-                    </button>
+                    {players[0]?.id === playerId ? (
+                      <button
+                        id="startGameButton"
+                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors duration-300"
+                        onClick={startGame}
+                        disabled={!canStart}
+                      >
+                        게임 시작 {!canStart && `(${players.length}/4)`}
+                      </button>
+                    ) : (
+                      <div className="text-gray-500 text-sm">
+                        방장만 게임을 시작할 수 있습니다.
+                      </div>
+                    )}
                   </div>
                 )}
                 {status === 'playing' && (
