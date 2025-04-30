@@ -777,175 +777,186 @@ export default function Room() {
             </button>
           </div>
         )}
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 max-w-3xl mx-auto">
-            <div className="card rounded-lg shadow p-4 mb-4 transition-colors duration-500">
-              <div className="flex justify-between items-center mb-4">
-                <h1 className="text-2xl font-bold text-primary">방 {roomName || roomId}</h1>
-                <button
-                  onClick={() => navigate('/')}
-                  className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-300"
-                >
-                  로비로 돌아가기
-                </button>
-              </div>
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <span className="text-sm text-secondary">상태: </span>
-                  <span className="font-semibold text-primary">{status}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-secondary">페이즈: </span>
-                  <span className="font-semibold text-primary">
-                    {phase} <span className="font-semibold">DAY {dayNumber}</span>
-                  </span>
-                </div>
-                {countdown && (
+        <div className="flex flex-col gap-4">
+          {/* 헤더 섹션 */}
+          <div className="card rounded-lg shadow p-4 transition-colors duration-500">
+            <div className="flex items-center justify-between relative">
+              <button
+                onClick={() => navigate('/')}
+                className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-300"
+              >
+                ← 로비
+              </button>
+              <h1 className="absolute left-1/2 transform -translate-x-1/2 text-2xl font-bold text-primary">
+                방 {roomName || roomId}
+              </h1>
+            </div>
+          </div>
+
+          {/* 메인 콘텐츠 */}
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* 왼쪽: 게임 상태 + 채팅 */}
+            <div className="flex-1">
+              <div className="card rounded-lg shadow p-4 mb-4 transition-colors duration-500">
+                <div className="flex justify-between items-center mb-4">
                   <div>
-                    <span className="text-sm text-secondary">남은 시간: </span>
-                    <span className="font-semibold text-primary">{countdown}</span>
+                    <span className="text-sm text-secondary">상태: </span>
+                    <span className="font-semibold text-primary">{status}</span>
+                  </div>
+                  <div>
+                    <span className="text-sm text-secondary">페이즈: </span>
+                    <span className="font-semibold text-primary">
+                      {phase} <span className="font-semibold">DAY {dayNumber}</span>
+                    </span>
+                  </div>
+                  {countdown && (
+                    <div>
+                      <span className="text-sm text-secondary">남은 시간: </span>
+                      <span className="font-semibold text-primary">{countdown}</span>
+                    </div>
+                  )}
+                </div>
+                {phaseMessage && (
+                  <div className="bg-blue-100 text-blue-800 p-2 rounded mb-4">
+                    {phaseMessage}
+                  </div>
+                )}
+                {status === 'waiting' && (
+                  <div className="mt-4">
+                    <button
+                      id="startGameButton"
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors duration-300"
+                      onClick={startGame}
+                      disabled={!canStart}
+                    >
+                      게임 시작 {!canStart && `(${players.length}/4)`}
+                    </button>
+                  </div>
+                )}
+                {status === 'playing' && (
+                  <div className="mt-4">
+                    <button
+                      id="resetGameButton"
+                      className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors duration-300"
+                      onClick={() => {
+                        if (window.confirm('게임을 초기화하시겠습니까?')) {
+                          endGame();
+                        }
+                      }}
+                    >
+                      게임 초기화
+                    </button>
                   </div>
                 )}
               </div>
-              {phaseMessage && (
-                <div className="bg-blue-100 text-blue-800 p-2 rounded mb-4">
-                  {phaseMessage}
-                </div>
+              <PhaseBanner phase={phase} countdown={countdown} day={cycleCount + (phase === 'day' ? 1 : 0)} />
+              {roomId && players.length > 0 && (
+                <Chat
+                  roomId={roomId}
+                  isHost={Boolean(playerId && players[0]?.id === playerId)}
+                  phase={phase}
+                  key={`chat-${players[0]?.id}-${playerId}`}
+                />
               )}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            </div>
+
+            {/* 오른쪽: 플레이어 목록 */}
+            <div className="lg:w-64 card rounded-lg shadow p-4 transition-colors duration-500 h-fit">
+              <h2 className="text-lg font-semibold mb-3 text-primary">플레이어 목록</h2>
+              <div className="space-y-2">
                 {players.length > 0 ? (
                   players.map((player) => (
                     <div
                       key={player.id}
-                      className={`p-4 rounded-lg transition-colors duration-500 border ${
+                      className={`p-2 rounded transition-colors duration-500 border ${
                         player.is_alive 
                           ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700' 
                           : 'bg-red-50 dark:bg-red-900 border-red-200 dark:border-red-800'
                       } ${
-                        player.id === playerId ? 'ring-2 ring-blue-500' : ''
+                        player.id === playerId ? 'ring-1 ring-blue-500' : ''
                       }`}
                     >
-                      <div className="font-semibold text-gray-900 dark:text-white">
+                      <div className="font-semibold text-gray-900 dark:text-white text-sm">
                         {player.nickname}
                         {player.id === playerId && ' (나)'}
                       </div>
-                      <div className="text-sm text-gray-700 dark:text-gray-300">
-                        {player.is_alive ? '생존' : '사망'}
+                      <div className="text-xs text-gray-700 dark:text-gray-300 flex justify-between">
+                        <span>{player.is_alive ? '생존' : '사망'}</span>
+                        {player.role && player.id === playerId && (
+                          <span className="text-blue-600">{player.role}</span>
+                        )}
                       </div>
-                      {player.role && player.id === playerId && (
-                        <div className="text-sm text-gray-700 dark:text-gray-300">
-                          역할: {player.role}
-                        </div>
-                      )}
                     </div>
                   ))
                 ) : (
-                  <div className="col-span-full text-center text-secondary">
+                  <div className="text-center text-secondary text-sm">
                     플레이어가 없습니다.
                   </div>
                 )}
               </div>
-              {status === 'waiting' && (
-                <div className="mt-4">
-                  <button
-                    id="startGameButton"
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 transition-colors duration-300"
-                    onClick={startGame}
-                    disabled={!canStart}
-                  >
-                    게임 시작 {!canStart && `(${players.length}/4)`}
-                  </button>
-                </div>
-              )}
-              {status === 'playing' && (
-                <div className="mt-4">
-                  <button
-                    id="resetGameButton"
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors duration-300"
-                    onClick={() => {
-                      if (window.confirm('게임을 초기화하시겠습니까?')) {
-                        endGame();
-                      }
-                    }}
-                  >
-                    게임 초기화
-                  </button>
-                </div>
-              )}
-            </div>
-            <PhaseBanner phase={phase} countdown={countdown} day={cycleCount + (phase === 'day' ? 1 : 0)} />
-            {roomId && players.length > 0 && (
-              <Chat
-                roomId={roomId}
-                isHost={Boolean(playerId && players[0]?.id === playerId)}
-                phase={phase}
-                key={`chat-${players[0]?.id}-${playerId}`}
-              />
-            )}
-            <div className="text-xs text-gray-500 mt-2">
-              {`DEBUG - First Player: ${players[0]?.id}, Current Player: ${playerId}`}
             </div>
           </div>
-
-          {status === 'starting' && modalState.show && (
-            <CountdownModal
-              role={currentPlayer?.role || '역할을 불러오는 중...'}
-              onClose={() => {
-                console.log('CountdownModal onClose 호출', {
-                  phase,
-                  status,
-                  modalState,
-                  currentPlayer,
-                  currentRole: currentPlayer?.role
-                });
-                if (status === 'starting') {
-                  console.log('게임 시작 프로세스 시작');
-                  startGameAfterCountdown();
-                }
-                setModalState(prev => ({
-                  ...prev,
-                  show: false,
-                  roleSeen: true
-                }));
-              }}
-              isNightPhase={phase === 'night'}
-            />
-          )}
-
-          {showMafiaVoteModal && (
-            <VoteModal
-              title="마피아 투표"
-              players={players.filter(p => p.is_alive && p.role !== '마피아')}
-              onVote={handleMafiaVote}
-              onClose={() => setShowMafiaVoteModal(false)}
-            />
-          )}
-
-          {showSacrificeModal && (
-            <SacrificeModal
-              victimName={sacrificeName}
-              onClose={() => setShowSacrificeModal(false)}
-            />
-          )}
-          {showEndModal && (
-            <EndGameModal
-              result={gameResult}
-              onClose={() => {
-                setShowEndModal(false);
-                endGame();            // 방을 waiting 상태로 초기화
-              }}
-            />
-          )}
-
-          {showCitizenVoteModal && (
-            <VoteModal
-              title="낮 재판 – 희생자 선택"
-              players={players.filter(p => p.is_alive)}
-              onVote={handleCitizenVote}
-              onClose={() => setShowCitizenVoteModal(false)}
-            />
-          )}
         </div>
+
+        {/* 모달들 */}
+        {status === 'starting' && modalState.show && (
+          <CountdownModal
+            role={currentPlayer?.role || '역할을 불러오는 중...'}
+            onClose={() => {
+              console.log('CountdownModal onClose 호출', {
+                phase,
+                status,
+                modalState,
+                currentPlayer,
+                currentRole: currentPlayer?.role
+              });
+              if (status === 'starting') {
+                console.log('게임 시작 프로세스 시작');
+                startGameAfterCountdown();
+              }
+              setModalState(prev => ({
+                ...prev,
+                show: false,
+                roleSeen: true
+              }));
+            }}
+            isNightPhase={phase === 'night'}
+          />
+        )}
+
+        {showMafiaVoteModal && (
+          <VoteModal
+            title="마피아 투표"
+            players={players.filter(p => p.is_alive && p.role !== '마피아')}
+            onVote={handleMafiaVote}
+            onClose={() => setShowMafiaVoteModal(false)}
+          />
+        )}
+
+        {showSacrificeModal && (
+          <SacrificeModal
+            victimName={sacrificeName}
+            onClose={() => setShowSacrificeModal(false)}
+          />
+        )}
+        {showEndModal && (
+          <EndGameModal
+            result={gameResult}
+            onClose={() => {
+              setShowEndModal(false);
+              endGame();            // 방을 waiting 상태로 초기화
+            }}
+          />
+        )}
+
+        {showCitizenVoteModal && (
+          <VoteModal
+            title="낮 재판 – 희생자 선택"
+            players={players.filter(p => p.is_alive)}
+            onVote={handleCitizenVote}
+            onClose={() => setShowCitizenVoteModal(false)}
+          />
+        )}
       </div>
     </ThemeProvider>
   );
