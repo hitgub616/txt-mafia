@@ -478,7 +478,6 @@ export default function Room() {
     const currentPlayerId = localStorage.getItem('playerId');
     if (!currentPlayerId) {
       console.error('게임 시작 실패: playerId가 없습니다.');
-      // 로비로 이동하지 않고 경고만 표시
       alert('플레이어 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
       return;
     }
@@ -489,18 +488,7 @@ export default function Room() {
     }
 
     try {
-      // 1) 방 상태를 'starting'으로 업데이트
-      const { error: startError } = await supabase
-        .from('rooms')
-        .update({ status: 'starting' })
-        .eq('id', roomId);
-
-      if (startError) {
-        console.error('게임 시작 상태 변경 실패:', startError);
-        return;
-      }
-
-      // 2) 역할 할당
+      // 1) 역할 할당
       const roles = assignRoles(players.length);
       console.log('배정된 역할:', roles);
 
@@ -526,6 +514,20 @@ export default function Room() {
       }
 
       console.log('역할 할당 성공');
+
+      // 2) 방 상태를 'starting'으로 업데이트
+      const { error: startError } = await supabase
+        .from('rooms')
+        .update({ 
+          status: 'starting',
+          phase: 'waiting'
+        })
+        .eq('id', roomId);
+
+      if (startError) {
+        console.error('게임 시작 상태 변경 실패:', startError);
+        return;
+      }
 
       // 로컬 상태 동기화
       setStatus('starting');
@@ -561,7 +563,9 @@ export default function Room() {
           phase: 'day',
           phase_ends_at: phaseEndsAt.toISOString()
         })
-        .eq('id', roomId);
+        .eq('id', roomId)
+        .select()
+        .single();
 
       if (gameError) {
         console.error('게임 시작 실패:', gameError);
@@ -576,8 +580,9 @@ export default function Room() {
 
       // 시스템 메시지 추가 시도
       try {
+        const messageId = uuidv4();
         await supabase.from('messages').insert({
-          id: uuidv4(),
+          id: messageId,
           room_id: roomId,
           player_id: null,
           nickname: '시스템',
