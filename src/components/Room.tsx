@@ -44,7 +44,7 @@ function CountdownModal({ role, onClose, isNightPhase }: { role: string; onClose
         ) : (
           <>
             <h2 className="text-2xl font-bold mb-4">당신의 역할은...</h2>
-            <p className="text-4xl font-bold text-red-500 mb-4">{role}</p>
+            <p className="text-4xl font-bold text-red-500 mb-4">{role || '역할 없음'}</p>
             {showConfirm && (
               <button
                 onClick={onClose}
@@ -881,13 +881,14 @@ export default function Room() {
 
           {status === 'starting' && modalState.show && (
             <CountdownModal
-              role={phase === 'night' && !isMafia ? '마피아가 움직이고 있습니다...' : currentPlayer?.role || ''}
+              role={currentPlayer?.role || '역할을 불러오는 중...'}
               onClose={() => {
                 console.log('CountdownModal onClose 호출', {
                   phase,
                   status,
                   modalState,
-                  currentPlayer
+                  currentPlayer,
+                  currentRole: currentPlayer?.role
                 });
                 if (status === 'starting') {
                   console.log('게임 시작 프로세스 시작');
