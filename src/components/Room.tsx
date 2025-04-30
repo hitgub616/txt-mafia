@@ -429,11 +429,12 @@ export default function Room() {
       }
     };
 
+    // 초기 데이터 로드
     fetchData();
 
-    // 구독 설정
-    const roomChannel = supabase
-      .channel(`room-${roomId}`)
+    // 실시간 구독 설정
+    const roomChannel = supabase.channel(`room-${roomId}`)
+      // 플레이어 변경 구독
       .on('postgres_changes', 
         { 
           event: '*', 
@@ -441,23 +442,23 @@ export default function Room() {
           table: 'players',
           filter: `room_id=eq.${roomId}`
         }, 
-        (payload) => {
+        async (payload) => {
           console.log('플레이어 변경 감지:', payload);
           const { new: newRow, old, eventType } = payload as any;
-          setPlayers((prev) => {
-            switch (eventType) {
-              case 'INSERT':
-                return [...prev, newRow as Player];
-              case 'UPDATE':
-                return prev.map((p) => (p.id === newRow.id ? (newRow as Player) : p));
-              case 'DELETE':
-                return prev.filter((p) => p.id !== old.id);
-              default:
-                return prev;
-            }
-          });
+          
+          // 플레이어 상태 업데이트
+          const { data: currentPlayers } = await supabase
+            .from('players')
+            .select('*')
+            .eq('room_id', roomId)
+            .order('joined_at');
+            
+          if (currentPlayers) {
+            setPlayers(currentPlayers as Player[]);
+          }
         }
       )
+      // 방 상태 변경 구독
       .on('postgres_changes',
         {
           event: 'UPDATE',
@@ -465,16 +466,33 @@ export default function Room() {
           table: 'rooms',
           filter: `id=eq.${roomId}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('방 상태 변경 감지:', payload);
           const { new: newRoom } = payload as any;
+          
+          // 방 상태 즉시 업데이트
           setStatus(newRoom.status);
           setPhase(newRoom.phase);
           setPhaseEndsAt(newRoom.phase_ends_at ? new Date(newRoom.phase_ends_at) : null);
           setRoomName(newRoom.name || newRoom.id.slice(0,8));
+          
+          // 전체 방 데이터 다시 로드
+          const { data: roomData } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('id', roomId)
+            .single();
+            
+          if (roomData) {
+            setStatus(roomData.status);
+            setPhase(roomData.phase);
+            setPhaseEndsAt(roomData.phase_ends_at ? new Date(roomData.phase_ends_at) : null);
+          }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('실시간 구독 상태:', status);
+      });
 
     return () => {
       console.log('구독 해제');
@@ -499,9 +517,11 @@ export default function Room() {
       return;
     }
 
-    if (!playerId) {
-      console.error('게임 시작 실패: playerId가 없습니다. 로비로 이동합니다.');
-      navigate('/');
+    const currentPlayerId = localStorage.getItem('playerId');
+    if (!currentPlayerId) {
+      console.error('게임 시작 실패: playerId가 없습니다.');
+      // 로비로 이동하지 않고 경고만 표시
+      alert('플레이어 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
       return;
     }
 
