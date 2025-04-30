@@ -780,7 +780,15 @@ export default function Room() {
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 max-w-3xl mx-auto">
             <div className="card rounded-lg shadow p-4 mb-4 transition-colors duration-500">
-              <h1 className="text-2xl font-bold mb-4 text-primary">방 {roomName || roomId}</h1>
+              <div className="flex justify-between items-center mb-4">
+                <h1 className="text-2xl font-bold text-primary">방 {roomName || roomId}</h1>
+                <button
+                  onClick={() => navigate('/')}
+                  className="px-2 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-300"
+                >
+                  로비로 돌아가기
+                </button>
+              </div>
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <span className="text-sm text-secondary">상태: </span>
