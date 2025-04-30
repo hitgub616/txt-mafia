@@ -431,7 +431,12 @@ export default function Room() {
           filter: `id=eq.${roomId}`
         },
         async (payload) => {
-          console.log('방 상태 변경 감지:', payload);
+          console.log('방 상태 변경 감지 [상세]:', {
+            event: payload.eventType,
+            oldRecord: payload.old,
+            newRecord: payload.new,
+            timestamp: new Date().toISOString()
+          });
           await refreshData();  // 전체 데이터 새로고침
         }
       )
@@ -444,12 +449,22 @@ export default function Room() {
           filter: `room_id=eq.${roomId}`
         },
         async (payload) => {
-          console.log('플레이어 변경 감지:', payload);
+          console.log('플레이어 변경 감지 [상세]:', {
+            event: payload.eventType,
+            oldRecord: payload.old,
+            newRecord: payload.new,
+            timestamp: new Date().toISOString()
+          });
           await refreshData();  // 전체 데이터 새로고침
         }
       )
       .subscribe((status) => {
-        console.log('실시간 구독 상태:', status);
+        console.log('실시간 구독 상태 [상세]:', {
+          status,
+          timestamp: new Date().toISOString(),
+          roomId,
+          currentPlayerId: playerId
+        });
       });
 
     return () => {
@@ -470,6 +485,14 @@ export default function Room() {
 
   // 게임 시작 버튼 클릭 시 실행
   const startGame = async () => {
+    console.log('게임 시작 시도 [상세]:', {
+      roomId,
+      currentPlayerId: localStorage.getItem('playerId'),
+      playerCount: players.length,
+      canStart,
+      timestamp: new Date().toISOString()
+    });
+
     if (!roomId) {
       console.error('게임 시작 실패: roomId가 없습니다.');
       return;
@@ -490,7 +513,11 @@ export default function Room() {
     try {
       // 1) 역할 할당
       const roles = assignRoles(players.length);
-      console.log('배정된 역할:', roles);
+      console.log('역할 할당 시도 [상세]:', {
+        roles,
+        players: players.map(p => ({ id: p.id, nickname: p.nickname })),
+        timestamp: new Date().toISOString()
+      });
 
       // 각 플레이어에게 역할 할당
       const roleUpdates = players.map((player, index) => ({
@@ -547,16 +574,19 @@ export default function Room() {
 
   // 카운트다운이 끝난 후 게임 시작
   const startGameAfterCountdown = async () => {
-    console.log('카운트다운 후 게임 시작 시도:', {
+    console.log('카운트다운 후 게임 시작 시도 [상세]:', {
       status,
       phase,
-      modalState
+      modalState,
+      roomId,
+      currentPlayerId: localStorage.getItem('playerId'),
+      timestamp: new Date().toISOString()
     });
     
     try {
       // 게임 상태 업데이트
       const phaseEndsAt = new Date(Date.now() + PHASE_DURATION.day * 1000);
-      const { error: gameError } = await supabase
+      const { data: updateResult, error: gameError } = await supabase
         .from('rooms')
         .update({
           status: 'playing',
@@ -568,9 +598,17 @@ export default function Room() {
         .single();
 
       if (gameError) {
-        console.error('게임 시작 실패:', gameError);
+        console.error('게임 시작 실패 [상세]:', {
+          error: gameError,
+          timestamp: new Date().toISOString()
+        });
         return;
       }
+
+      console.log('게임 상태 업데이트 성공 [상세]:', {
+        updateResult,
+        timestamp: new Date().toISOString()
+      });
 
       // 상태 업데이트
       setStatus('playing');
