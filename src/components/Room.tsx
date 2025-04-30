@@ -362,14 +362,8 @@ export default function Room() {
       return;
     }
 
-    console.log('초기 데이터 로드 시작:', { 
-      roomId, 
-      playerId,
-      currentPhase: phase,
-      currentStatus: status,
-    });
-
-    const fetchData = async () => {
+    // 전체 데이터 새로고침 함수
+    const refreshData = async () => {
       try {
         // 방 정보 조회
         const { data: roomData, error: roomError } = await supabase
@@ -390,12 +384,6 @@ export default function Room() {
           return;
         }
 
-        console.log('방 데이터 로드 성공:', {
-          roomId: roomData.id,
-          status: roomData.status,
-          phase: roomData.phase,
-        });
-
         // 플레이어 정보 조회
         const { data: playersData, error: playersError } = await supabase
           .from('players')
@@ -409,11 +397,6 @@ export default function Room() {
           return;
         }
 
-        console.log('플레이어 데이터 로드 성공:', {
-          playerCount: playersData?.length,
-          players: playersData?.map(p => ({ id: p.id, nickname: p.nickname, role: p.role }))
-        });
-
         // 상태 업데이트
         setStatus(roomData.status);
         setPhase(roomData.phase);
@@ -423,71 +406,46 @@ export default function Room() {
         if (playersData) {
           setPlayers(playersData as Player[]);
         }
+
+        console.log('데이터 새로고침 완료:', {
+          status: roomData.status,
+          phase: roomData.phase,
+          playerCount: playersData?.length
+        });
       } catch (error) {
-        console.error('데이터 로드 중 오류 발생:', error);
-        setError('데이터를 불러오는 중 오류가 발생했습니다.');
+        console.error('데이터 새로고침 중 오류 발생:', error);
       }
     };
 
     // 초기 데이터 로드
-    fetchData();
+    refreshData();
 
     // 실시간 구독 설정
-    const roomChannel = supabase.channel(`room-${roomId}`)
-      // 플레이어 변경 구독
+    const channel = supabase.channel(`room-${roomId}-all`)
+      // rooms 테이블 변경 구독
       .on('postgres_changes', 
         { 
-          event: '*', 
-          schema: 'public', 
-          table: 'players',
-          filter: `room_id=eq.${roomId}`
-        }, 
-        async (payload) => {
-          console.log('플레이어 변경 감지:', payload);
-          const { new: newRow, old, eventType } = payload as any;
-          
-          // 플레이어 상태 업데이트
-          const { data: currentPlayers } = await supabase
-            .from('players')
-            .select('*')
-            .eq('room_id', roomId)
-            .order('joined_at');
-            
-          if (currentPlayers) {
-            setPlayers(currentPlayers as Player[]);
-          }
-        }
-      )
-      // 방 상태 변경 구독
-      .on('postgres_changes',
-        {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'rooms',
           filter: `id=eq.${roomId}`
         },
         async (payload) => {
           console.log('방 상태 변경 감지:', payload);
-          const { new: newRoom } = payload as any;
-          
-          // 방 상태 즉시 업데이트
-          setStatus(newRoom.status);
-          setPhase(newRoom.phase);
-          setPhaseEndsAt(newRoom.phase_ends_at ? new Date(newRoom.phase_ends_at) : null);
-          setRoomName(newRoom.name || newRoom.id.slice(0,8));
-          
-          // 전체 방 데이터 다시 로드
-          const { data: roomData } = await supabase
-            .from('rooms')
-            .select('*')
-            .eq('id', roomId)
-            .single();
-            
-          if (roomData) {
-            setStatus(roomData.status);
-            setPhase(roomData.phase);
-            setPhaseEndsAt(roomData.phase_ends_at ? new Date(roomData.phase_ends_at) : null);
-          }
+          await refreshData();  // 전체 데이터 새로고침
+        }
+      )
+      // players 테이블 변경 구독
+      .on('postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'players',
+          filter: `room_id=eq.${roomId}`
+        },
+        async (payload) => {
+          console.log('플레이어 변경 감지:', payload);
+          await refreshData();  // 전체 데이터 새로고침
         }
       )
       .subscribe((status) => {
@@ -496,7 +454,7 @@ export default function Room() {
 
     return () => {
       console.log('구독 해제');
-      supabase.removeChannel(roomChannel);
+      supabase.removeChannel(channel);
     };
   }, [roomId]);
 
