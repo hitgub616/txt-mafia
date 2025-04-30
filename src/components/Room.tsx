@@ -8,6 +8,7 @@ import { PhaseContext } from '../contexts/PhaseContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { Player, GamePhase, PlayerRole } from '../types/game';
 import { useNavigate } from 'react-router-dom';
+import { v4 as uuidv4 } from 'uuid';
 
 // 카운트다운 모달 컴포넌트
 function CountdownModal({ role, onClose, isNightPhase }: { role: string; onClose: () => void; isNightPhase: boolean }) {
@@ -510,7 +511,18 @@ export default function Room() {
     }
 
     try {
-      // 1) 역할 할당
+      // 1) 방 상태를 'starting'으로 업데이트
+      const { error: startError } = await supabase
+        .from('rooms')
+        .update({ status: 'starting' })
+        .eq('id', roomId);
+
+      if (startError) {
+        console.error('게임 시작 상태 변경 실패:', startError);
+        return;
+      }
+
+      // 2) 역할 할당
       const roles = assignRoles(players.length);
       console.log('배정된 역할:', roles);
 
@@ -537,26 +549,16 @@ export default function Room() {
 
       console.log('역할 할당 성공');
 
-      // 2) 방 상태를 'starting'으로 업데이트
-      const { error: startError } = await supabase
-        .from('rooms')
-        .update({ status: 'starting' })
-        .eq('id', roomId);
-
-      if (startError) {
-        console.error('게임 시작 상태 변경 실패:', startError);
-        return;
-      }
-
       // 로컬 상태 동기화
       setStatus('starting');
-
+      
       // 3) 카운트다운 모달 표시
       setModalState({
         show: true,
         roleSeen: false,
         roleAlerted: false
       });
+
     } catch (error) {
       console.error('게임 시작 준비 중 오류 발생:', error);
       alert('게임 시작 준비 중 오류가 발생했습니다.');
@@ -588,26 +590,31 @@ export default function Room() {
         return;
       }
 
-      console.log('게임 상태 업데이트 성공: playing');
-
       // 상태 업데이트
       setStatus('playing');
       setPhase('day');
       setPhaseEndsAt(phaseEndsAt);
       setPhaseMessage(PHASE_MESSAGES.day);
 
-      // 채팅에 메시지 추가
-      await supabase.from('messages').insert({
-        room_id: roomId,
-        player_id: null,
-        nickname: '시스템',
-        content: '게임이 시작되었습니다.',
-        created_at: new Date().toISOString()
-      });
+      // 시스템 메시지 추가 시도
+      try {
+        await supabase.from('messages').insert({
+          id: uuidv4(),
+          room_id: roomId,
+          player_id: null,
+          nickname: '시스템',
+          content: '게임이 시작되었습니다.',
+          created_at: new Date().toISOString()
+        });
+      } catch (msgError) {
+        console.error('시스템 메시지 전송 실패:', msgError);
+        // 메시지 전송 실패는 게임 진행에 치명적이지 않으므로 계속 진행
+      }
 
       console.log('게임 시작 완료');
     } catch (error) {
       console.error('게임 시작 중 오류 발생:', error);
+      alert('게임 시작 중 오류가 발생했습니다.');
     }
   };
 
