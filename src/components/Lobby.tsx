@@ -132,17 +132,31 @@ export default function Lobby() {
         timestamp: new Date().toISOString()
       });
 
-      // 2. 방 인원 수 확인
+      // 2. 현재 방의 플레이어 수 확인
       const roomPlayers = existingPlayers?.filter(p => p.room_id === roomId) || [];
-      if (roomPlayers.length >= 9) {
+      const storedPlayerId = localStorage.getItem('playerId');
+      
+      // 3. 현재 플레이어가 이미 이 방에 있는지 확인
+      const playerInThisRoom = roomPlayers.find(p => p.id === storedPlayerId);
+      if (playerInThisRoom) {
+        console.log('플레이어가 이미 이 방에 있음 [상세]:', {
+          playerId: storedPlayerId,
+          roomId,
+          timestamp: new Date().toISOString()
+        });
+        navigate(`/room/${roomId}`);
+        return;
+      }
+
+      // 4. 방 인원 수 체크 (이미 방에 있는 경우는 제외)
+      if (!playerInThisRoom && roomPlayers.length >= 9) {
         alert('이 방은 이미 가득 찼습니다. (9/9)');
         return;
       }
 
-      // 3. 이전 플레이어 정보 삭제
-      const storedPlayerId = localStorage.getItem('playerId');
+      // 5. 이전 플레이어 정보 삭제 (다른 방에 있는 경우)
       if (storedPlayerId) {
-        const playerInOtherRoom = existingPlayers?.find(p => p.id === storedPlayerId);
+        const playerInOtherRoom = existingPlayers?.find(p => p.id === storedPlayerId && p.room_id !== roomId);
         if (playerInOtherRoom) {
           console.log('이전 플레이어 제거 시도 [상세]:', {
             playerId: storedPlayerId,
@@ -169,56 +183,50 @@ export default function Lobby() {
         }
       }
 
-      // 4. 새로운 플레이어 등록
-      const animal = getRandomAnimal();
-      const nickname = animal.emoji;
-      const playerId = uuidv4();
-      
-      console.log('새 플레이어 등록 시도 [상세]:', {
-        playerId,
-        nickname,
-        roomId,
-        timestamp: new Date().toISOString()
-      });
-
-      const { error: joinError } = await supabase
-        .from('players')
-        .insert({ 
-          id: playerId, 
-          room_id: roomId, 
+      // 6. 새로운 플레이어 등록 (이미 방에 있지 않은 경우에만)
+      if (!playerInThisRoom) {
+        const animal = getRandomAnimal();
+        const nickname = animal.emoji;
+        const playerId = uuidv4();
+        
+        console.log('새 플레이어 등록 시도 [상세]:', {
+          playerId,
           nickname,
-          joined_at: new Date().toISOString()
-        });
-
-      if (joinError) {
-        console.error('플레이어 등록 실패 [상세]:', {
-          error: joinError,
+          roomId,
           timestamp: new Date().toISOString()
         });
-        
-        if (joinError.code === '23505') { // 중복 키 에러
-          alert('이미 방에 참여한 플레이어입니다. 잠시 후 다시 시도해주세요.');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          window.location.reload();
+
+        const { error: joinError } = await supabase
+          .from('players')
+          .insert({ 
+            id: playerId, 
+            room_id: roomId, 
+            nickname,
+            joined_at: new Date().toISOString()
+          });
+
+        if (joinError) {
+          console.error('플레이어 등록 실패 [상세]:', {
+            error: joinError,
+            timestamp: new Date().toISOString()
+          });
+          alert(`방 참여 실패: ${joinError.message}\n(에러 코드: ${joinError.code})\n\n페이지를 새로고침한 후 다시 시도해주세요.`);
           return;
         }
-        
-        alert(`방 참여 실패: ${joinError.message}\n(에러 코드: ${joinError.code})\n\n페이지를 새로고침한 후 다시 시도해주세요.`);
-        return;
+
+        console.log('플레이어 등록 성공 [상세]:', {
+          playerId,
+          nickname,
+          roomId,
+          timestamp: new Date().toISOString()
+        });
+
+        // 로컬 저장 (본인 식별용)
+        localStorage.setItem('playerId', playerId);
+        localStorage.setItem('nickname', nickname);
+        localStorage.setItem('roomId', roomId);
+        localStorage.setItem('emojiName', animal.name);
       }
-
-      console.log('플레이어 등록 성공 [상세]:', {
-        playerId,
-        nickname,
-        roomId,
-        timestamp: new Date().toISOString()
-      });
-
-      // 로컬 저장 (본인 식별용)
-      localStorage.setItem('playerId', playerId);
-      localStorage.setItem('nickname', nickname);
-      localStorage.setItem('roomId', roomId);
-      localStorage.setItem('emojiName', animal.name);
 
       navigate(`/room/${roomId}`);
     } catch (err) {

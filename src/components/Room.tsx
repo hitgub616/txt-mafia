@@ -408,14 +408,27 @@ export default function Room() {
 
         // 2. 현재 방의 플레이어 수 확인
         const roomPlayers = existingPlayers?.filter(p => p.room_id === roomId) || [];
-        if (roomPlayers.length >= 9) {
+        
+        // 3. 현재 플레이어가 이미 이 방에 있는지 확인
+        const playerInThisRoom = roomPlayers.find(p => p.id === currentPlayerId);
+        if (playerInThisRoom) {
+          console.log('플레이어가 이미 이 방에 있음 [상세]:', {
+            playerId: currentPlayerId,
+            roomId,
+            timestamp: new Date().toISOString()
+          });
+          return; // 이미 방에 있으면 추가 작업 없이 종료
+        }
+
+        // 4. 방 인원 수 체크 (이미 방에 있는 경우는 제외)
+        if (!playerInThisRoom && roomPlayers.length >= 9) {
           setError('이 방은 이미 가득 찼습니다. (9/9)');
           navigate('/');
           return;
         }
 
-        // 3. 현재 플레이어가 다른 방에 있는지 확인
-        const playerInOtherRoom = existingPlayers?.find(p => p.id === currentPlayerId);
+        // 5. 현재 플레이어가 다른 방에 있는지 확인
+        const playerInOtherRoom = existingPlayers?.find(p => p.id === currentPlayerId && p.room_id !== roomId);
         if (playerInOtherRoom) {
           console.log('기존 플레이어 제거 시도 [상세]:', {
             playerId: currentPlayerId,
@@ -423,7 +436,7 @@ export default function Room() {
             timestamp: new Date().toISOString()
           });
 
-          // 3-1. 기존 플레이어 제거
+          // 5-1. 기존 플레이어 제거
           const { error: deleteError } = await supabase
             .from('players')
             .delete()
@@ -438,47 +451,44 @@ export default function Room() {
             return;
           }
 
-          // 3-2. 삭제 작업이 완료될 때까지 대기
+          // 5-2. 삭제 작업이 완료될 때까지 대기
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
 
-        // 4. 새로운 플레이어 추가
-        console.log('새 플레이어 추가 시도 [상세]:', {
-          playerId: currentPlayerId,
-          nickname: currentNickname,
-          roomId,
-          timestamp: new Date().toISOString()
-        });
-
-        const { error: insertError } = await supabase
-          .from('players')
-          .insert({
-            id: currentPlayerId,
-            room_id: roomId,
+        // 6. 새로운 플레이어 추가 (이미 방에 있지 않은 경우에만)
+        if (!playerInThisRoom) {
+          console.log('새 플레이어 추가 시도 [상세]:', {
+            playerId: currentPlayerId,
             nickname: currentNickname,
-            joined_at: new Date().toISOString()
-          });
-
-        if (insertError) {
-          console.error('플레이어 추가 실패 [상세]:', {
-            error: insertError,
+            roomId,
             timestamp: new Date().toISOString()
           });
-          setError(`플레이어 추가 실패: ${insertError.message} (${insertError.code})`);
-          if (insertError.code === '23505') { // 중복 키 에러
-            setError('이미 방에 참여한 플레이어입니다. 잠시 후 다시 시도해주세요.');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            window.location.reload(); // 페이지 새로고침
-          }
-          return;
-        }
 
-        console.log('플레이어 추가 성공 [상세]:', {
-          playerId: currentPlayerId,
-          nickname: currentNickname,
-          roomId,
-          timestamp: new Date().toISOString()
-        });
+          const { error: insertError } = await supabase
+            .from('players')
+            .insert({
+              id: currentPlayerId,
+              room_id: roomId,
+              nickname: currentNickname,
+              joined_at: new Date().toISOString()
+            });
+
+          if (insertError) {
+            console.error('플레이어 추가 실패 [상세]:', {
+              error: insertError,
+              timestamp: new Date().toISOString()
+            });
+            setError(`플레이어 추가 실패: ${insertError.message} (${insertError.code})`);
+            return;
+          }
+
+          console.log('플레이어 추가 성공 [상세]:', {
+            playerId: currentPlayerId,
+            nickname: currentNickname,
+            roomId,
+            timestamp: new Date().toISOString()
+          });
+        }
 
       } catch (error) {
         console.error('플레이어 처리 중 오류 [상세]:', {
