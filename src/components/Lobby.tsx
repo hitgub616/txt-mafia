@@ -105,19 +105,33 @@ export default function Lobby() {
 
   const joinRoom = async (roomId: string) => {
     try {
-      console.log('방 참여 시도:', roomId);
+      console.log('방 참여 시도 [상세]:', {
+        roomId,
+        storedPlayerId: localStorage.getItem('playerId'),
+        storedRoomId: localStorage.getItem('roomId'),
+        timestamp: new Date().toISOString()
+      });
 
       // 현재 방의 플레이어 수 확인
       const { data: players, error: countError } = await supabase
         .from('players')
-        .select('id')
+        .select('id, nickname')
         .eq('room_id', roomId);
 
       if (countError) {
-        console.error('플레이어 수 확인 실패:', countError);
-        alert('방 참여에 실패했습니다.');
+        console.error('플레이어 수 확인 실패 [상세]:', {
+          error: countError,
+          timestamp: new Date().toISOString()
+        });
+        alert(`방 참여 실패: ${countError.message}\n(에러 코드: ${countError.code})`);
         return;
       }
+
+      console.log('현재 방 플레이어 상태 [상세]:', {
+        playerCount: players?.length,
+        players: players?.map(p => ({ id: p.id, nickname: p.nickname })),
+        timestamp: new Date().toISOString()
+      });
 
       if (players && players.length >= 9) {
         alert('이 방은 이미 가득 찼습니다. (9/9)');
@@ -127,17 +141,41 @@ export default function Lobby() {
       // 새로운 플레이어 등록 전에 이전 플레이어 정보 삭제
       const storedPlayerId = localStorage.getItem('playerId');
       if (storedPlayerId) {
-        await supabase
+        console.log('이전 플레이어 제거 시도 [상세]:', {
+          playerId: storedPlayerId,
+          timestamp: new Date().toISOString()
+        });
+
+        const { error: deleteError } = await supabase
           .from('players')
           .delete()
           .eq('id', storedPlayerId);
+
+        if (deleteError) {
+          console.error('이전 플레이어 제거 실패 [상세]:', {
+            error: deleteError,
+            timestamp: new Date().toISOString()
+          });
+          alert(`이전 플레이어 제거 실패: ${deleteError.message}\n(에러 코드: ${deleteError.code})`);
+          return;
+        }
       }
+
+      // 잠시 대기하여 삭제 작업이 완료되도록 함
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // 새로운 플레이어 등록
       const animal = getRandomAnimal();
       const nickname = animal.emoji;
       const playerId = uuidv4();
       
+      console.log('새 플레이어 등록 시도 [상세]:', {
+        playerId,
+        nickname,
+        roomId,
+        timestamp: new Date().toISOString()
+      });
+
       const { error: joinError } = await supabase
         .from('players')
         .insert({ 
@@ -148,12 +186,20 @@ export default function Lobby() {
         });
 
       if (joinError) {
-        console.error('플레이어 등록 실패:', joinError);
-        alert('방 참여에 실패했습니다: ' + joinError.message);
+        console.error('플레이어 등록 실패 [상세]:', {
+          error: joinError,
+          timestamp: new Date().toISOString()
+        });
+        alert(`방 참여 실패: ${joinError.message}\n(에러 코드: ${joinError.code})\n\n페이지를 새로고침한 후 다시 시도해주세요.`);
         return;
       }
 
-      console.log('플레이어 등록 성공:', { playerId, nickname });
+      console.log('플레이어 등록 성공 [상세]:', {
+        playerId,
+        nickname,
+        roomId,
+        timestamp: new Date().toISOString()
+      });
 
       // 로컬 저장 (본인 식별용)
       localStorage.setItem('playerId', playerId);
@@ -163,8 +209,11 @@ export default function Lobby() {
 
       navigate(`/room/${roomId}`);
     } catch (err) {
-      console.error('방 참여 중 예외 발생:', err);
-      alert('방 참여 중 오류가 발생했습니다.');
+      console.error('방 참여 중 예외 발생 [상세]:', {
+        error: err,
+        timestamp: new Date().toISOString()
+      });
+      alert(`방 참여 중 오류가 발생했습니다.\n\n${err instanceof Error ? err.message : '알 수 없는 오류'}`);
     }
   };
 

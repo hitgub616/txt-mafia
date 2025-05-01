@@ -367,24 +367,68 @@ export default function Room() {
       const currentPlayerId = localStorage.getItem('playerId');
       const currentNickname = localStorage.getItem('nickname');
       
+      console.log('플레이어 확인 시도 [상세]:', {
+        currentPlayerId,
+        currentNickname,
+        roomId,
+        timestamp: new Date().toISOString()
+      });
+      
       if (!currentPlayerId || !currentNickname) {
-        console.error('플레이어 정보가 없습니다.');
+        console.error('플레이어 정보 없음 [상세]:', {
+          currentPlayerId,
+          currentNickname,
+          timestamp: new Date().toISOString()
+        });
+        setError('플레이어 정보를 찾을 수 없습니다. 로비로 이동합니다.');
         navigate('/');
         return;
       }
 
       try {
         // 먼저 이전 방에서 플레이어 제거
-        await supabase
+        console.log('이전 플레이어 제거 시도 [상세]:', {
+          playerId: currentPlayerId,
+          timestamp: new Date().toISOString()
+        });
+
+        const { error: deleteError } = await supabase
           .from('players')
           .delete()
           .eq('id', currentPlayerId);
 
+        if (deleteError) {
+          console.error('이전 플레이어 제거 실패 [상세]:', {
+            error: deleteError,
+            timestamp: new Date().toISOString()
+          });
+          setError(`이전 플레이어 제거 실패: ${deleteError.message} (에러 코드: ${deleteError.code})`);
+          return;
+        }
+
+        // 잠시 대기하여 삭제 작업이 완료되도록 함
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         // 현재 방의 플레이어 수 확인
-        const { data: players } = await supabase
+        const { data: players, error: countError } = await supabase
           .from('players')
-          .select('id')
+          .select('id, nickname')
           .eq('room_id', roomId);
+
+        if (countError) {
+          console.error('플레이어 수 확인 실패 [상세]:', {
+            error: countError,
+            timestamp: new Date().toISOString()
+          });
+          setError(`플레이어 수 확인 실패: ${countError.message}`);
+          return;
+        }
+
+        console.log('현재 방 플레이어 상태 [상세]:', {
+          playerCount: players?.length,
+          players: players?.map(p => ({ id: p.id, nickname: p.nickname })),
+          timestamp: new Date().toISOString()
+        });
 
         if (players && players.length >= 9) {
           setError('이 방은 이미 가득 찼습니다. (9/9)');
@@ -393,6 +437,13 @@ export default function Room() {
         }
 
         // 플레이어 추가
+        console.log('새 플레이어 추가 시도 [상세]:', {
+          playerId: currentPlayerId,
+          nickname: currentNickname,
+          roomId,
+          timestamp: new Date().toISOString()
+        });
+
         const { error: joinError } = await supabase
           .from('players')
           .insert({
@@ -403,14 +454,27 @@ export default function Room() {
           });
 
         if (joinError) {
-          console.error('플레이어 추가 실패:', joinError);
-          setError('방 참여에 실패했습니다.');
+          console.error('플레이어 추가 실패 [상세]:', {
+            error: joinError,
+            timestamp: new Date().toISOString()
+          });
+          setError(`방 참여 실패: ${joinError.message} (에러 코드: ${joinError.code})`);
           navigate('/');
           return;
         }
 
-        console.log('플레이어 추가 성공');
+        console.log('플레이어 추가 성공 [상세]:', {
+          playerId: currentPlayerId,
+          nickname: currentNickname,
+          roomId,
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
+        console.error('플레이어 처리 중 오류 [상세]:', {
+          error,
+          timestamp: new Date().toISOString()
+        });
+        setError(`플레이어 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
         console.error('플레이어 처리 중 오류:', error);
         setError('플레이어 처리 중 오류가 발생했습니다.');
         navigate('/');
