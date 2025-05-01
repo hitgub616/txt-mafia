@@ -362,9 +362,70 @@ export default function Room() {
       return;
     }
 
+    // 현재 플레이어가 방에 있는지 확인하고 없으면 추가하는 함수
+    const ensurePlayerInRoom = async () => {
+      const currentPlayerId = localStorage.getItem('playerId');
+      const currentNickname = localStorage.getItem('nickname');
+      
+      if (!currentPlayerId || !currentNickname) {
+        console.error('플레이어 정보가 없습니다.');
+        navigate('/');
+        return;
+      }
+
+      // 현재 플레이어가 이 방에 있는지 확인
+      const { data: existingPlayer } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('id', currentPlayerId)
+        .single();
+
+      if (!existingPlayer) {
+        console.log('새 플레이어 추가 시도:', {
+          playerId: currentPlayerId,
+          nickname: currentNickname,
+          roomId
+        });
+
+        // 현재 방의 플레이어 수 확인
+        const { data: players } = await supabase
+          .from('players')
+          .select('id')
+          .eq('room_id', roomId);
+
+        if (players && players.length >= 9) {
+          setError('이 방은 이미 가득 찼습니다. (9/9)');
+          navigate('/');
+          return;
+        }
+
+        // 플레이어 추가
+        const { error: joinError } = await supabase
+          .from('players')
+          .insert({
+            id: currentPlayerId,
+            room_id: roomId,
+            nickname: currentNickname,
+            joined_at: new Date().toISOString()
+          });
+
+        if (joinError) {
+          console.error('플레이어 추가 실패:', joinError);
+          setError('방 참여에 실패했습니다.');
+          navigate('/');
+          return;
+        }
+
+        console.log('플레이어 추가 성공');
+      }
+    };
+
     // 전체 데이터 새로고침 함수
     const refreshData = async () => {
       try {
+        await ensurePlayerInRoom();  // 플레이어 존재 확인 및 추가
+        
         // 방 정보 조회
         const { data: roomData, error: roomError } = await supabase
           .from('rooms')
@@ -467,11 +528,30 @@ export default function Room() {
         });
       });
 
+    // 컴포넌트 언마운트 시 정리
     return () => {
-      console.log('구독 해제');
+      console.log('Room 컴포넌트 언마운트');
+      
+      // 구독 해제
       supabase.removeChannel(channel);
+
+      // 플레이어 제거 (게임 중이 아닐 때만)
+      if (status !== 'playing' && playerId) {
+        supabase
+          .from('players')
+          .delete()
+          .eq('room_id', roomId)
+          .eq('id', playerId)
+          .then(({ error }) => {
+            if (error) {
+              console.error('플레이어 자동 제거 실패:', error);
+            } else {
+              console.log('플레이어 자동 제거 성공');
+            }
+          });
+      }
     };
-  }, [roomId]);
+  }, [roomId, navigate, playerId, status]);
 
   // players 배열 변경 감지
   useEffect(() => {
@@ -792,6 +872,32 @@ export default function Room() {
     }
   };
 
+  // 방 나가기 처리
+  const handleLeaveRoom = async () => {
+    if (!roomId || !playerId) return;
+
+    try {
+      // 플레이어 제거
+      const { error: removeError } = await supabase
+        .from('players')
+        .delete()
+        .eq('room_id', roomId)
+        .eq('id', playerId);
+
+      if (removeError) {
+        console.error('플레이어 제거 실패:', removeError);
+      }
+
+      // localStorage 정리
+      localStorage.removeItem('roomId');
+      
+      // 로비로 이동
+      navigate('/');
+    } catch (error) {
+      console.error('방 나가기 처리 중 오류:', error);
+    }
+  };
+
   return (
     <ThemeProvider phase={phase}>
       <div className="container mx-auto p-4 min-h-screen bg-primary transition-colors duration-500">
@@ -811,7 +917,7 @@ export default function Room() {
           <div className="card rounded-lg shadow p-4 transition-colors duration-500">
             <div className="flex items-center justify-between relative">
               <button
-                onClick={() => navigate('/')}
+                onClick={handleLeaveRoom}
                 className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors duration-300"
               >
                 ← 로비
