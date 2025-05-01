@@ -124,13 +124,13 @@ export default function Lobby() {
         return;
       }
 
-      // 이미 이 방에 참여 기록이 있는지 확인
-      const storedRoomId = localStorage.getItem('roomId');
+      // 새로운 플레이어 등록 전에 이전 플레이어 정보 삭제
       const storedPlayerId = localStorage.getItem('playerId');
-      if (storedRoomId === roomId && storedPlayerId) {
-        console.log('이미 참여한 방입니다. 바로 입장합니다.');
-        navigate(`/room/${roomId}`);
-        return;
+      if (storedPlayerId) {
+        await supabase
+          .from('players')
+          .delete()
+          .eq('id', storedPlayerId);
       }
 
       // 새로운 플레이어 등록

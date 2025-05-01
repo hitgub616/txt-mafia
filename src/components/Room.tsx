@@ -373,20 +373,12 @@ export default function Room() {
         return;
       }
 
-      // 현재 플레이어가 이 방에 있는지 확인
-      const { data: existingPlayer } = await supabase
-        .from('players')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('id', currentPlayerId)
-        .single();
-
-      if (!existingPlayer) {
-        console.log('새 플레이어 추가 시도:', {
-          playerId: currentPlayerId,
-          nickname: currentNickname,
-          roomId
-        });
+      try {
+        // 먼저 이전 방에서 플레이어 제거
+        await supabase
+          .from('players')
+          .delete()
+          .eq('id', currentPlayerId);
 
         // 현재 방의 플레이어 수 확인
         const { data: players } = await supabase
@@ -418,6 +410,10 @@ export default function Room() {
         }
 
         console.log('플레이어 추가 성공');
+      } catch (error) {
+        console.error('플레이어 처리 중 오류:', error);
+        setError('플레이어 처리 중 오류가 발생했습니다.');
+        navigate('/');
       }
     };
 
