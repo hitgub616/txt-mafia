@@ -1,3 +1,5 @@
+"use client"
+
 import { ConnectionTest } from "@/components/connection-test"
 
 export default function TestPage() {

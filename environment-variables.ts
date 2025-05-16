@@ -35,14 +35,18 @@ export const CLIENT_CONFIG = {
  * 현재 설정된 환경 변수를 콘솔에 출력합니다.
  */
 export function debugEnvironmentVariables() {
-  console.log("=== 환경 변수 디버깅 ===")
-  console.log("NEXT_PUBLIC_SOCKET_URL:", process.env.NEXT_PUBLIC_SOCKET_URL)
-  console.log("RAILWAY_STATIC_URL:", process.env.RAILWAY_STATIC_URL)
-  console.log("CLIENT_URL:", process.env.CLIENT_URL)
-  console.log("NODE_ENV:", process.env.NODE_ENV)
-  console.log("PORT:", process.env.PORT)
-  console.log("PUBLIC_SOCKET_URL (계산됨):", CLIENT_CONFIG.PUBLIC_SOCKET_URL)
-  console.log("======================")
+  const isServer = typeof window === "undefined"
+
+  if (!isServer) {
+    console.log("=== 환경 변수 디버깅 ===")
+    console.log("NEXT_PUBLIC_SOCKET_URL:", process.env.NEXT_PUBLIC_SOCKET_URL)
+    console.log("RAILWAY_STATIC_URL:", process.env.RAILWAY_STATIC_URL)
+    console.log("CLIENT_URL:", process.env.CLIENT_URL)
+    console.log("NODE_ENV:", process.env.NODE_ENV)
+    console.log("PORT:", process.env.PORT)
+    console.log("PUBLIC_SOCKET_URL (계산됨):", CLIENT_CONFIG.PUBLIC_SOCKET_URL)
+    console.log("======================")
+  }
 
   return {
     NEXT_PUBLIC_SOCKET_URL: process.env.NEXT_PUBLIC_SOCKET_URL,

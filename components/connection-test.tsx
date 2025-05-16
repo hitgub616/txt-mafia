@@ -9,6 +9,8 @@ import { CLIENT_CONFIG } from "@/environment-variables"
 
 export function ConnectionTest() {
   const [isLoading, setIsLoading] = useState(true)
+  const [socketUrl, setSocketUrl] = useState("")
+  const [clientUrl, setClientUrl] = useState("")
   const [testResults, setTestResults] = useState<{
     serverReachable: boolean | null
     websocketSupported: boolean | null
@@ -23,13 +25,27 @@ export function ConnectionTest() {
     details: null,
   })
 
-  // 환경 변수에서 Socket.IO 서버 URL 가져오기
-  const socketUrl =
-    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-      ? `http://${window.location.hostname}:3001`
-      : CLIENT_CONFIG.PUBLIC_SOCKET_URL
+  // 컴포넌트가 마운트된 후에만 window 객체에 접근
+  useEffect(() => {
+    // 환경 변수에서 Socket.IO 서버 URL 가져오기
+    const url =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ? `http://${window.location.hostname}:3001`
+        : CLIENT_CONFIG.PUBLIC_SOCKET_URL
+
+    setSocketUrl(url)
+    setClientUrl(typeof window !== "undefined" ? window.location.origin : "")
+
+    // 초기 테스트 실행
+    if (typeof window !== "undefined") {
+      runTests()
+    }
+  }, [])
 
   const runTests = async () => {
+    if (typeof window === "undefined") return
+
     setIsLoading(true)
     setTestResults({
       serverReachable: null,
@@ -128,10 +144,6 @@ export function ConnectionTest() {
     setIsLoading(false)
   }
 
-  useEffect(() => {
-    runTests()
-  }, [])
-
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
@@ -194,7 +206,7 @@ export function ConnectionTest() {
           <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md text-sm">
             <p className="font-medium text-blue-400 mb-1">서버 정보</p>
             <p>Socket URL: {socketUrl}</p>
-            <p>Client URL: {window.location.origin}</p>
+            <p>Client URL: {clientUrl}</p>
             <p>NEXT_PUBLIC_SOCKET_URL: {process.env.NEXT_PUBLIC_SOCKET_URL || "(설정되지 않음)"}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               이 서버는 Socket.IO 서버로, 게임의 실시간 통신과 게임 로직을 처리합니다.

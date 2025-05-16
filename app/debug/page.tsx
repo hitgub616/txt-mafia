@@ -18,11 +18,15 @@ export default function DebugPage() {
 
   useEffect(() => {
     // 환경 변수 디버깅
-    const vars = debugEnvironmentVariables()
-    setEnvVars(vars)
+    if (typeof window !== "undefined") {
+      const vars = debugEnvironmentVariables()
+      setEnvVars(vars)
+    }
   }, [])
 
   const testSocketConnection = async () => {
+    if (typeof window === "undefined") return
+
     setSocketTest({
       status: "testing",
       message: "Socket.IO 서버에 연결 중...",
@@ -155,10 +159,20 @@ export default function DebugPage() {
         </Card>
 
         <div className="flex justify-center space-x-4">
-          <Button variant="outline" onClick={() => (window.location.href = "/")}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (typeof window !== "undefined") window.location.href = "/"
+            }}
+          >
             홈으로 돌아가기
           </Button>
-          <Button variant="outline" onClick={() => (window.location.href = "/test")}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (typeof window !== "undefined") window.location.href = "/test"
+            }}
+          >
             연결 테스트 페이지로 이동
           </Button>
         </div>

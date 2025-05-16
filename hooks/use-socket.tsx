@@ -15,9 +15,12 @@ export function useSocket(roomId: string) {
 
   // Check if we're in offline mode
   const isOfflineMode =
-    (typeof window !== "undefined" && roomId.startsWith("offline-")) || sessionStorage.getItem("offlineMode") === "true"
+    typeof window !== "undefined" && (roomId.startsWith("offline-") || sessionStorage.getItem("offlineMode") === "true")
 
   useEffect(() => {
+    // 서버 사이드 렌더링 중에는 실행하지 않음
+    if (typeof window === "undefined") return
+
     // If in offline mode, don't attempt to connect
     if (isOfflineMode) {
       console.log("Offline mode detected - skipping Socket.IO connection")
@@ -119,6 +122,8 @@ export function useSocket(roomId: string) {
 
   // Retry connection if failed
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     if (!isOfflineMode && error && connectionAttempts < 5) {
       const retryTimer = setTimeout(() => {
         console.log(`[Socket.IO] 재연결 시도 중 (${connectionAttempts + 1}/5)...`)
@@ -161,11 +166,13 @@ export function useSocket(roomId: string) {
     error,
     connectionDetails: {
       url:
-        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-          ? `http://${window.location.hostname}:3001`
+        typeof window !== "undefined"
+          ? window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+            ? `http://${window.location.hostname}:3001`
+            : CLIENT_CONFIG.PUBLIC_SOCKET_URL
           : CLIENT_CONFIG.PUBLIC_SOCKET_URL,
       attempts: connectionAttempts,
-      clientUrl: window.location.origin,
+      clientUrl: typeof window !== "undefined" ? window.location.origin : "",
     },
   }
 }
