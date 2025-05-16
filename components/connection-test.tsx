@@ -37,14 +37,14 @@ export function ConnectionTest() {
 
     try {
       // Test basic HTTP connectivity
-      const response = await fetch("https://txtmafiav0-production.up.railway.app", {
+      const response = await fetch("https://v0-txt-mafia.vercel.app/api/socket", {
         method: "HEAD",
         mode: "no-cors",
       })
       serverReachable = true
 
       // Test Socket.IO connectivity
-      const socket = io("https://txtmafiav0-production.up.railway.app", {
+      const socket = io("https://v0-txt-mafia.vercel.app/api/socket", {
         transports: ["websocket"],
         timeout: 5000,
         forceNew: true,
