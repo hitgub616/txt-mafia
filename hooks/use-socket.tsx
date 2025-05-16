@@ -21,12 +21,15 @@ export function useSocket(roomId: string) {
     // Create socket connection with explicit options
     const socketInstance = io(socketUrl, {
       query: { roomId },
-      transports: ["websocket", "polling"], // Try WebSocket first, then fallback to polling
+      transports: ["polling"], // Use only polling since WebSocket is not working
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000, // Increased timeout
       withCredentials: false, // Disable credentials for cross-origin requests
       forceNew: true, // Force a new connection
+      extraHeaders: {
+        "Access-Control-Allow-Origin": "*", // Try to bypass CORS (client-side only)
+      },
     })
 
     // Set up event listeners

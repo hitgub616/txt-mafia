@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, WifiOff } from "lucide-react"
 import Link from "next/link"
 
 export function LobbyForm() {
@@ -104,8 +104,8 @@ export function LobbyForm() {
           </Tabs>
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col">
-        <div className="w-full p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md flex items-start mt-2">
+      <CardFooter className="flex flex-col space-y-3">
+        <div className="w-full p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md flex items-start">
           <AlertCircle className="h-5 w-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
           <div className="text-sm text-yellow-200">
             <p className="font-medium">연결 문제가 있나요?</p>
@@ -118,6 +118,13 @@ export function LobbyForm() {
             </p>
           </div>
         </div>
+
+        <Link href="/offline" className="w-full">
+          <Button variant="outline" className="w-full flex items-center">
+            <WifiOff className="h-4 w-4 mr-2" />
+            오프라인 모드로 플레이
+          </Button>
+        </Link>
       </CardFooter>
     </Card>
   )
