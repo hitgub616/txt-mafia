@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, AlertTriangle, RefreshCw } from "lucide-react"
 import { io } from "socket.io-client"
+import { CLIENT_CONFIG } from "@/environment-variables"
 
 export function ConnectionTest() {
   const [isLoading, setIsLoading] = useState(true)
@@ -21,7 +22,7 @@ export function ConnectionTest() {
   })
 
   // 환경 변수에서 Socket.IO 서버 URL 가져오기
-  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app"
+  const socketUrl = CLIENT_CONFIG.PUBLIC_SOCKET_URL
 
   const runTests = async () => {
     setIsLoading(true)
@@ -43,6 +44,9 @@ export function ConnectionTest() {
       const response = await fetch(socketUrl, {
         method: "HEAD",
         mode: "no-cors",
+        headers: {
+          Origin: CLIENT_CONFIG.CLIENT_URL,
+        },
       })
       serverReachable = true
 
@@ -51,6 +55,9 @@ export function ConnectionTest() {
         transports: ["websocket"],
         timeout: 5000,
         forceNew: true,
+        extraHeaders: {
+          Origin: CLIENT_CONFIG.CLIENT_URL,
+        },
       })
 
       // Set up a promise to wait for connection or error
@@ -153,7 +160,8 @@ export function ConnectionTest() {
 
           <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md text-sm">
             <p className="font-medium text-blue-400 mb-1">서버 정보</p>
-            <p>URL: {socketUrl}</p>
+            <p>Socket URL: {socketUrl}</p>
+            <p>Client URL: {CLIENT_CONFIG.CLIENT_URL}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               이 서버는 Railway에 배포된 Socket.IO 서버로, 게임의 실시간 통신과 게임 로직을 처리합니다.
             </p>

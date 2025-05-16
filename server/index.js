@@ -3,12 +3,17 @@ const http = require("http")
 const { Server } = require("socket.io")
 const cors = require("cors")
 
+// 환경 변수 설정
+const PORT = process.env.PORT || 3001
+const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"
+const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || ""
+
 const app = express()
 
-// 더 자세한 CORS 설정
+// CORS 설정 부분만 수정
 app.use(
   cors({
-    origin: "*", // 모든 출처 허용
+    origin: "*", // 모든 출처 허용 (테스트용)
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -26,18 +31,25 @@ app.get("/status", (req, res) => {
     status: "online",
     timestamp: new Date().toISOString(),
     rooms: Array.from(rooms.keys()),
+    env: {
+      port: PORT,
+      railwayUrl: RAILWAY_URL,
+      clientUrl: CLIENT_URL,
+      nodeEnv: process.env.NODE_ENV,
+    },
   })
 })
 
 const server = http.createServer(app)
+// Socket.IO 서버 설정 부분도 수정
 const io = new Server(server, {
   cors: {
-    origin: "*", // Allow all origins in development
+    origin: "*", // 모든 출처 허용 (테스트용)
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   },
-  transports: ["websocket", "polling"], // WebSocket과 폴링 모두 지원
+  transports: ["websocket", "polling"],
 })
 
 // Game state
@@ -535,17 +547,17 @@ function handlePlayerDisconnect(socketId, roomId) {
 }
 
 // Start server
-const PORT = process.env.PORT || 3001
 server.listen(PORT, () => {
   console.log(`
 ========================================
   Mafia Game Server
 ========================================
   Server running on port: ${PORT}
-  CORS: All origins allowed
+  CORS: ${CLIENT_URL === "*" ? "All origins allowed" : CLIENT_URL}
   
   Local URL: http://localhost:${PORT}
-  Railway URL: ${process.env.RAILWAY_STATIC_URL || "Not deployed on Railway yet"}
+  Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
+  Client URL: ${CLIENT_URL}
 ========================================
   `)
 })

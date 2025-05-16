@@ -11,11 +11,14 @@ function getSocketInstance() {
     const socketUrl =
       process.env.NODE_ENV === "development"
         ? "http://localhost:3001"
-        : `${process.env.VERCEL_URL || "https://your-vercel-app.vercel.app"}/api/socket`
+        : process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app"
 
     socketInstance = io(socketUrl, {
       transports: ["websocket", "polling"],
       reconnectionAttempts: 5,
+      extraHeaders: {
+        Origin: process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app",
+      },
     })
 
     socketInstance.on("connect", () => {

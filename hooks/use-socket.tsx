@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { io, type Socket } from "socket.io-client"
+import { CLIENT_CONFIG } from "@/environment-variables"
 
 export function useSocket(roomId: string) {
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -28,7 +29,7 @@ export function useSocket(roomId: string) {
     const socketUrl =
       window.location.hostname === "localhost"
         ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
-        : process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app" // Use Railway in production
+        : CLIENT_CONFIG.PUBLIC_SOCKET_URL // Use configured URL in production
 
     console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
 
@@ -40,11 +41,14 @@ export function useSocket(roomId: string) {
       reconnectionDelay: 1000,
       timeout: 20000, // Increased timeout
       withCredentials: false, // Disable credentials for cross-origin requests
+      // 추가 디버깅 옵션
+      forceNew: true,
+      autoConnect: true,
     })
 
     // Set up event listeners
     socketInstance.on("connect", () => {
-      console.log("Socket connected successfully")
+      console.log("Socket connected successfully", socketInstance.id)
       setIsConnected(true)
       setError(null)
     })
@@ -62,6 +66,27 @@ export function useSocket(roomId: string) {
         // the disconnection was initiated by the server, reconnect manually
         socketInstance.connect()
       }
+    })
+
+    // 추가 디버깅 이벤트
+    socketInstance.io.on("error", (error) => {
+      console.error("Transport error:", error)
+    })
+
+    socketInstance.io.on("reconnect", (attempt) => {
+      console.log(`Socket reconnected after ${attempt} attempts`)
+    })
+
+    socketInstance.io.on("reconnect_attempt", (attempt) => {
+      console.log(`Socket reconnect attempt: ${attempt}`)
+    })
+
+    socketInstance.io.on("reconnect_error", (error) => {
+      console.error("Socket reconnect error:", error)
+    })
+
+    socketInstance.io.on("reconnect_failed", () => {
+      console.error("Socket reconnect failed")
     })
 
     // Save socket instance
@@ -120,8 +145,9 @@ export function useSocket(roomId: string) {
       url:
         window.location.hostname === "localhost"
           ? `http://${window.location.hostname}:3001`
-          : process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app",
+          : CLIENT_CONFIG.PUBLIC_SOCKET_URL,
       attempts: connectionAttempts,
+      clientUrl: CLIENT_CONFIG.CLIENT_URL,
     },
   }
 }
