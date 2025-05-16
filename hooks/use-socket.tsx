@@ -4,12 +4,8 @@ import { useEffect, useState } from "react"
 import { io, type Socket } from "socket.io-client"
 import { CLIENT_CONFIG } from "@/environment-variables"
 
-// 전역 소켓 인스턴스를 저장할 변수를 window 객체에 추가합니다.
-declare global {
-  interface Window {
-    _socketInstance: Socket | undefined
-  }
-}
+// 전역 소켓 인스턴스를 저장할 변수
+let globalSocketInstance: Socket | null = null
 
 export function useSocket(roomId: string) {
   const [socket, setSocket] = useState<Socket | null>(null)
@@ -29,28 +25,23 @@ export function useSocket(roomId: string) {
       return () => {} // Empty cleanup function
     }
 
-    // 이미 연결된 소켓이 있으면 재사용
-    if (socket && isConnected) {
-      console.log("Socket already connected, reusing existing connection")
-      return () => {}
-    }
-
     // Reset error state
     setError(null)
 
     // Determine the correct Socket.IO URL based on the environment
     const socketUrl =
-      window.location.hostname === "localhost"
+      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
         ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
         : CLIENT_CONFIG.PUBLIC_SOCKET_URL // Use configured URL in production
 
-    console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
+    console.log(`[Socket.IO] 연결 시도: ${socketUrl}`)
+    console.log(`[Socket.IO] 환경 변수: NEXT_PUBLIC_SOCKET_URL=${process.env.NEXT_PUBLIC_SOCKET_URL}`)
+    console.log(`[Socket.IO] 클라이언트 URL: ${window.location.origin}`)
 
-    // 전역 소켓 인스턴스 생성 (싱글톤 패턴)
-    // 이미 존재하는 소켓 연결이 있는지 확인
-    if (window._socketInstance) {
-      console.log("Reusing existing global socket instance")
-      setSocket(window._socketInstance)
+    // 전역 소켓 인스턴스가 있고 연결되어 있으면 재사용
+    if (globalSocketInstance && globalSocketInstance.connected) {
+      console.log("[Socket.IO] 기존 연결 재사용")
+      setSocket(globalSocketInstance)
       setIsConnected(true)
       return () => {}
     }
@@ -63,28 +54,27 @@ export function useSocket(roomId: string) {
       reconnectionDelay: 1000,
       timeout: 20000, // Increased timeout
       withCredentials: false, // Disable credentials for cross-origin requests
-      forceNew: true,
-      autoConnect: true,
     })
 
     // 전역 변수에 소켓 인스턴스 저장
-    window._socketInstance = socketInstance
+    globalSocketInstance = socketInstance
 
     // Set up event listeners
     socketInstance.on("connect", () => {
-      console.log("Socket connected successfully", socketInstance.id)
+      console.log("[Socket.IO] 연결 성공:", socketInstance.id)
+      console.log("[Socket.IO] 전송 방식:", socketInstance.io.engine.transport.name)
       setIsConnected(true)
       setError(null)
     })
 
     socketInstance.on("connect_error", (err) => {
-      console.error("Socket connection error:", err)
+      console.error("[Socket.IO] 연결 오류:", err)
       setError(`연결 오류: ${err.message}\n\n서버 URL: ${socketUrl}\n시도: ${connectionAttempts + 1}/5`)
       setConnectionAttempts((prev) => prev + 1)
     })
 
     socketInstance.on("disconnect", (reason) => {
-      console.log(`Socket disconnected: ${reason}`)
+      console.log(`[Socket.IO] 연결 해제: ${reason}`)
       setIsConnected(false)
       if (reason === "io server disconnect") {
         // the disconnection was initiated by the server, reconnect manually
@@ -94,23 +84,23 @@ export function useSocket(roomId: string) {
 
     // 추가 디버깅 이벤트
     socketInstance.io.on("error", (error) => {
-      console.error("Transport error:", error)
+      console.error("[Socket.IO] 전송 오류:", error)
     })
 
     socketInstance.io.on("reconnect", (attempt) => {
-      console.log(`Socket reconnected after ${attempt} attempts`)
+      console.log(`[Socket.IO] 재연결 성공 (시도 ${attempt}회)`)
     })
 
     socketInstance.io.on("reconnect_attempt", (attempt) => {
-      console.log(`Socket reconnect attempt: ${attempt}`)
+      console.log(`[Socket.IO] 재연결 시도 ${attempt}회`)
     })
 
     socketInstance.io.on("reconnect_error", (error) => {
-      console.error("Socket reconnect error:", error)
+      console.error("[Socket.IO] 재연결 오류:", error)
     })
 
     socketInstance.io.on("reconnect_failed", () => {
-      console.error("Socket reconnect failed")
+      console.error("[Socket.IO] 재연결 실패")
     })
 
     // Save socket instance
@@ -118,16 +108,20 @@ export function useSocket(roomId: string) {
 
     // Clean up on unmount
     return () => {
-      console.log("Cleaning up socket connection")
-      socketInstance.disconnect()
+      // 페이지를 완전히 떠날 때만 소켓 연결 해제
+      if (window.location.pathname !== `/room/${roomId}`) {
+        console.log("[Socket.IO] 연결 정리 중")
+        socketInstance.disconnect()
+        globalSocketInstance = null
+      }
     }
-  }, [roomId, connectionAttempts, isOfflineMode, socket, isConnected])
+  }, [roomId, connectionAttempts, isOfflineMode])
 
   // Retry connection if failed
   useEffect(() => {
     if (!isOfflineMode && error && connectionAttempts < 5) {
       const retryTimer = setTimeout(() => {
-        console.log(`Retrying connection (Attempt ${connectionAttempts + 1}/5)...`)
+        console.log(`[Socket.IO] 재연결 시도 중 (${connectionAttempts + 1}/5)...`)
       }, 3000)
 
       return () => clearTimeout(retryTimer)
@@ -167,11 +161,11 @@ export function useSocket(roomId: string) {
     error,
     connectionDetails: {
       url:
-        window.location.hostname === "localhost"
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
           ? `http://${window.location.hostname}:3001`
           : CLIENT_CONFIG.PUBLIC_SOCKET_URL,
       attempts: connectionAttempts,
-      clientUrl: CLIENT_CONFIG.CLIENT_URL,
+      clientUrl: window.location.origin,
     },
   }
 }

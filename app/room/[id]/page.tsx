@@ -27,6 +27,7 @@ export default function RoomPage() {
   const [nickname, setNickname] = useState("")
   const [isOfflineMode, setIsOfflineMode] = useState(false)
   const [playerCount, setPlayerCount] = useState(4)
+  const [hasJoined, setHasJoined] = useState(false)
 
   // Check if we're in offline mode
   useEffect(() => {
@@ -68,84 +69,58 @@ export default function RoomPage() {
       setPhase(offlineGame.phase)
       return
     }
+  }, [router, isOfflineMode, offlineGame])
 
-    // Otherwise use socket connection
-    if (socket && isConnected) {
-      // 이미 방에 참가한 상태인지 확인하는 플래그
-      const hasJoinedRoom = sessionStorage.getItem(`joined_${roomId}`) === "true"
+  // 소켓 연결 및 방 참가 로직을 별도의 useEffect로 분리
+  useEffect(() => {
+    if (isOfflineMode || !socket || !isConnected || !nickname || hasJoined) return
 
-      if (!hasJoinedRoom) {
-        // Join the room
-        console.log(`Joining room ${roomId} as ${storedNickname}`)
-        socket.emit("joinRoom", { roomId, nickname: storedNickname, isHost: storedIsHost })
+    // Join the room
+    console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
+    socket.emit("joinRoom", { roomId, nickname, isHost })
+    setHasJoined(true)
 
-        // 방 참가 상태 저장
-        sessionStorage.setItem(`joined_${roomId}`, "true")
-      } else {
-        console.log(`Already joined room ${roomId}, skipping join request`)
-      }
+    // Listen for player updates
+    socket.on("playersUpdate", (updatedPlayers: Player[]) => {
+      console.log("Received players update:", updatedPlayers)
+      setPlayers(updatedPlayers)
+    })
 
-      // Listen for player updates
-      socket.on("playersUpdate", (updatedPlayers: Player[]) => {
-        // 중복 플레이어 제거 (같은 닉네임의 첫 번째 항목만 유지)
-        const uniquePlayers = updatedPlayers.reduce((acc, player) => {
-          // 이미 같은 닉네임의 플레이어가 있는지 확인
-          const existingPlayerIndex = acc.findIndex((p) => p.nickname === player.nickname)
+    // Listen for game state updates
+    socket.on(
+      "gameStateUpdate",
+      (data: {
+        state: GameState
+        role?: "mafia" | "citizen"
+        day?: number
+        phase?: "day" | "night"
+        winner?: "mafia" | "citizen"
+      }) => {
+        setGameState(data.state)
 
-          // 없으면 추가, 있으면 호스트인 경우에만 업데이트
-          if (existingPlayerIndex === -1) {
-            acc.push(player)
-          } else if (player.isHost) {
-            acc[existingPlayerIndex] = player
-          }
+        if (data.role) {
+          setRole(data.role)
+        }
 
-          return acc
-        }, [] as Player[])
+        if (data.day) {
+          setDay(data.day)
+        }
 
-        setPlayers(uniquePlayers)
-      })
+        if (data.phase) {
+          setPhase(data.phase)
+        }
 
-      // Listen for game state updates
-      socket.on(
-        "gameStateUpdate",
-        (data: {
-          state: GameState
-          role?: "mafia" | "citizen"
-          day?: number
-          phase?: "day" | "night"
-          winner?: "mafia" | "citizen"
-        }) => {
-          setGameState(data.state)
-
-          if (data.role) {
-            setRole(data.role)
-          }
-
-          if (data.day) {
-            setDay(data.day)
-          }
-
-          if (data.phase) {
-            setPhase(data.phase)
-          }
-
-          if (data.winner) {
-            setWinner(data.winner)
-          }
-        },
-      )
-    }
+        if (data.winner) {
+          setWinner(data.winner)
+        }
+      },
+    )
 
     return () => {
-      if (socket) {
-        socket.off("playersUpdate")
-        socket.off("gameStateUpdate")
-
-        // 페이지를 떠날 때 방 참가 상태 제거
-        sessionStorage.removeItem(`joined_${roomId}`)
-      }
+      socket.off("playersUpdate")
+      socket.off("gameStateUpdate")
     }
-  }, [socket, isConnected, roomId, router, isOfflineMode, offlineGame])
+  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined])
 
   // Handle disconnection
   useEffect(() => {

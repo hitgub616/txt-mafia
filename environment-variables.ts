@@ -27,7 +27,7 @@ export const CLIENT_CONFIG = {
   IS_DEV: process.env.NODE_ENV === "development",
 
   // 클라이언트 URL
-  CLIENT_URL: "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app",
+  CLIENT_URL: process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app",
 }
 
 /**
@@ -40,6 +40,7 @@ export function debugEnvironmentVariables() {
   console.log("RAILWAY_STATIC_URL:", process.env.RAILWAY_STATIC_URL)
   console.log("CLIENT_URL:", process.env.CLIENT_URL)
   console.log("NODE_ENV:", process.env.NODE_ENV)
+  console.log("PORT:", process.env.PORT)
   console.log("PUBLIC_SOCKET_URL (계산됨):", CLIENT_CONFIG.PUBLIC_SOCKET_URL)
   console.log("======================")
 
@@ -48,6 +49,7 @@ export function debugEnvironmentVariables() {
     RAILWAY_STATIC_URL: process.env.RAILWAY_STATIC_URL,
     CLIENT_URL: process.env.CLIENT_URL,
     NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
     PUBLIC_SOCKET_URL: CLIENT_CONFIG.PUBLIC_SOCKET_URL,
   }
 }
@@ -59,8 +61,14 @@ export function debugEnvironmentVariables() {
 export function validateEnvironmentVariables() {
   const missingVars = []
 
+  // 개발 환경에서 필수 환경 변수 검사
+  if (process.env.NODE_ENV === "development") {
+    if (!process.env.NEXT_PUBLIC_SOCKET_URL) missingVars.push("NEXT_PUBLIC_SOCKET_URL")
+    if (!process.env.CLIENT_URL) missingVars.push("CLIENT_URL")
+  }
+
   // 프로덕션 환경에서 필수 환경 변수 검사
-  if (process.env.NODE_ENV === "production") {
+  else if (process.env.NODE_ENV === "production") {
     if (!process.env.NEXT_PUBLIC_SOCKET_URL) missingVars.push("NEXT_PUBLIC_SOCKET_URL")
     if (!process.env.RAILWAY_STATIC_URL) missingVars.push("RAILWAY_STATIC_URL")
     if (!process.env.CLIENT_URL) missingVars.push("CLIENT_URL")

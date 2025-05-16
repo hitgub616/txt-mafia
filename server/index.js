@@ -8,12 +8,17 @@ const PORT = process.env.PORT || 3001
 const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"
 const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || ""
 
+// 개발 환경 확인
+const isDev = process.env.NODE_ENV === "development"
+
 const app = express()
 
-// CORS 설정 부분만 수정
+// CORS 설정 수정 - 로컬호스트 허용
 app.use(
   cors({
-    origin: "*", // 모든 출처 허용 (테스트용)
+    origin: isDev
+      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -36,15 +41,21 @@ app.get("/status", (req, res) => {
       railwayUrl: RAILWAY_URL,
       clientUrl: CLIENT_URL,
       nodeEnv: process.env.NODE_ENV,
+      isDev,
+      corsOrigins: isDev
+        ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+        : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     },
   })
 })
 
 const server = http.createServer(app)
-// Socket.IO 서버 설정 부분도 수정
+// Socket.IO 서버 설정 - 로컬호스트 허용
 const io = new Server(server, {
   cors: {
-    origin: "*", // 모든 출처 허용 (테스트용)
+    origin: isDev
+      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -288,10 +299,12 @@ io.on("connection", (socket) => {
 
   // Join room
   socket.on("joinRoom", ({ roomId, nickname, isHost }) => {
+    console.log(`User ${nickname} (${socket.id}) joining room ${roomId}, isHost: ${isHost}`)
     socket.join(roomId)
 
     // Create room if it doesn't exist
     if (!rooms.has(roomId)) {
+      console.log(`Creating new room: ${roomId}`)
       rooms.set(roomId, {
         id: roomId,
         players: [],
@@ -322,6 +335,7 @@ io.on("connection", (socket) => {
       }
     } else {
       // 새 플레이어 추가
+      console.log(`Adding new player ${nickname} to room ${roomId}`)
       const player = {
         id: socket.id,
         nickname,
@@ -333,6 +347,12 @@ io.on("connection", (socket) => {
 
       room.players.push(player)
     }
+
+    // 플레이어 목록 로깅
+    console.log(
+      `Room ${roomId} players:`,
+      room.players.map((p) => p.nickname),
+    )
 
     // Broadcast updated player list
     io.to(roomId).emit(
@@ -569,7 +589,8 @@ server.listen(PORT, () => {
   Mafia Game Server
 ========================================
   Server running on port: ${PORT}
-  CORS: ${CLIENT_URL === "*" ? "All origins allowed" : CLIENT_URL}
+  Environment: ${isDev ? "Development" : "Production"}
+  CORS: ${isDev ? "All origins allowed" : CLIENT_URL}
   
   Local URL: http://localhost:${PORT}
   Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
