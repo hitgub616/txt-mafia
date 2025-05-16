@@ -71,12 +71,38 @@ export default function RoomPage() {
 
     // Otherwise use socket connection
     if (socket && isConnected) {
-      // Join the room
-      socket.emit("joinRoom", { roomId, nickname: storedNickname, isHost: storedIsHost })
+      // 이미 방에 참가한 상태인지 확인하는 플래그
+      const hasJoinedRoom = sessionStorage.getItem(`joined_${roomId}`) === "true"
+
+      if (!hasJoinedRoom) {
+        // Join the room
+        console.log(`Joining room ${roomId} as ${storedNickname}`)
+        socket.emit("joinRoom", { roomId, nickname: storedNickname, isHost: storedIsHost })
+
+        // 방 참가 상태 저장
+        sessionStorage.setItem(`joined_${roomId}`, "true")
+      } else {
+        console.log(`Already joined room ${roomId}, skipping join request`)
+      }
 
       // Listen for player updates
       socket.on("playersUpdate", (updatedPlayers: Player[]) => {
-        setPlayers(updatedPlayers)
+        // 중복 플레이어 제거 (같은 닉네임의 첫 번째 항목만 유지)
+        const uniquePlayers = updatedPlayers.reduce((acc, player) => {
+          // 이미 같은 닉네임의 플레이어가 있는지 확인
+          const existingPlayerIndex = acc.findIndex((p) => p.nickname === player.nickname)
+
+          // 없으면 추가, 있으면 호스트인 경우에만 업데이트
+          if (existingPlayerIndex === -1) {
+            acc.push(player)
+          } else if (player.isHost) {
+            acc[existingPlayerIndex] = player
+          }
+
+          return acc
+        }, [] as Player[])
+
+        setPlayers(uniquePlayers)
       })
 
       // Listen for game state updates
@@ -114,6 +140,9 @@ export default function RoomPage() {
       if (socket) {
         socket.off("playersUpdate")
         socket.off("gameStateUpdate")
+
+        // 페이지를 떠날 때 방 참가 상태 제거
+        sessionStorage.removeItem(`joined_${roomId}`)
       }
     }
   }, [socket, isConnected, roomId, router, isOfflineMode, offlineGame])

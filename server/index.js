@@ -306,17 +306,33 @@ io.on("connection", (socket) => {
 
     const room = rooms.get(roomId)
 
-    // Add player to room
-    const player = {
-      id: socket.id,
-      nickname,
-      isHost,
-      role: null,
-      isAlive: true,
-      vote: null,
-    }
+    // 이미 같은 닉네임의 플레이어가 있는지 확인
+    const existingPlayerIndex = room.players.findIndex((p) => p.nickname === nickname)
 
-    room.players.push(player)
+    if (existingPlayerIndex !== -1) {
+      // 이미 존재하는 플레이어의 소켓 ID 업데이트
+      console.log(
+        `Player ${nickname} already exists, updating socket ID from ${room.players[existingPlayerIndex].id} to ${socket.id}`,
+      )
+      room.players[existingPlayerIndex].id = socket.id
+
+      // 호스트 상태 업데이트 (클라이언트가 호스트라고 주장하면 호스트로 설정)
+      if (isHost) {
+        room.players[existingPlayerIndex].isHost = true
+      }
+    } else {
+      // 새 플레이어 추가
+      const player = {
+        id: socket.id,
+        nickname,
+        isHost,
+        role: null,
+        isAlive: true,
+        vote: null,
+      }
+
+      room.players.push(player)
+    }
 
     // Broadcast updated player list
     io.to(roomId).emit(

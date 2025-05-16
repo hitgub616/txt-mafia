@@ -4,6 +4,13 @@ import { useEffect, useState } from "react"
 import { io, type Socket } from "socket.io-client"
 import { CLIENT_CONFIG } from "@/environment-variables"
 
+// 전역 소켓 인스턴스를 저장할 변수를 window 객체에 추가합니다.
+declare global {
+  interface Window {
+    _socketInstance: Socket | undefined
+  }
+}
+
 export function useSocket(roomId: string) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -22,6 +29,12 @@ export function useSocket(roomId: string) {
       return () => {} // Empty cleanup function
     }
 
+    // 이미 연결된 소켓이 있으면 재사용
+    if (socket && isConnected) {
+      console.log("Socket already connected, reusing existing connection")
+      return () => {}
+    }
+
     // Reset error state
     setError(null)
 
@@ -33,6 +46,15 @@ export function useSocket(roomId: string) {
 
     console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
 
+    // 전역 소켓 인스턴스 생성 (싱글톤 패턴)
+    // 이미 존재하는 소켓 연결이 있는지 확인
+    if (window._socketInstance) {
+      console.log("Reusing existing global socket instance")
+      setSocket(window._socketInstance)
+      setIsConnected(true)
+      return () => {}
+    }
+
     // Create socket connection with explicit options
     const socketInstance = io(socketUrl, {
       query: { roomId },
@@ -41,10 +63,12 @@ export function useSocket(roomId: string) {
       reconnectionDelay: 1000,
       timeout: 20000, // Increased timeout
       withCredentials: false, // Disable credentials for cross-origin requests
-      // 추가 디버깅 옵션
       forceNew: true,
       autoConnect: true,
     })
+
+    // 전역 변수에 소켓 인스턴스 저장
+    window._socketInstance = socketInstance
 
     // Set up event listeners
     socketInstance.on("connect", () => {
@@ -97,7 +121,7 @@ export function useSocket(roomId: string) {
       console.log("Cleaning up socket connection")
       socketInstance.disconnect()
     }
-  }, [roomId, connectionAttempts, isOfflineMode])
+  }, [roomId, connectionAttempts, isOfflineMode, socket, isConnected])
 
   // Retry connection if failed
   useEffect(() => {
