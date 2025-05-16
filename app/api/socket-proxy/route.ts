@@ -1,7 +1,54 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { io } from "socket.io-client"
 
-// In-memory event storage (this will be lost on server restart)
+// 이벤트 저장소 (서버 재시작 시 초기화됨)
+let socketInstance: any = null
 const eventStore: Record<string, { time: number; events: any[] }> = {}
+
+// Socket.IO 서버에 연결
+function getSocketInstance() {
+  if (!socketInstance) {
+    const socketUrl =
+      process.env.NODE_ENV === "development"
+        ? "http://localhost:3001"
+        : `${process.env.VERCEL_URL || "https://your-vercel-app.vercel.app"}/api/socket`
+
+    socketInstance = io(socketUrl, {
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 5,
+    })
+
+    socketInstance.on("connect", () => {
+      console.log("Proxy connected to Socket.IO server")
+    })
+
+    socketInstance.on("connect_error", (err: any) => {
+      console.error("Proxy connection error:", err.message)
+    })
+
+    // 모든 이벤트 리스닝
+    socketInstance.onAny((event: string, ...args: any[]) => {
+      const roomId = args[0]?.roomId || "global"
+
+      if (!eventStore[roomId]) {
+        eventStore[roomId] = { time: Date.now(), events: [] }
+      }
+
+      eventStore[roomId].events.push({
+        event,
+        data: args[0],
+        time: Date.now(),
+      })
+
+      // 최대 100개 이벤트만 저장
+      if (eventStore[roomId].events.length > 100) {
+        eventStore[roomId].events = eventStore[roomId].events.slice(-100)
+      }
+    })
+  }
+
+  return socketInstance
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +60,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Room ID is required" }, { status: 400 })
     }
 
-    // Get events for this room that are newer than lastEventTime
+    // 이 방의 이벤트 중 lastEventTime보다 새로운 이벤트 가져오기
     const roomEvents = eventStore[roomId]
     if (!roomEvents) {
       return NextResponse.json({ events: [] })
@@ -37,21 +84,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Room ID and event are required" }, { status: 400 })
     }
 
-    // Store the event
-    if (!eventStore[roomId]) {
-      eventStore[roomId] = { time: Date.now(), events: [] }
-    }
-
-    eventStore[roomId].events.push({
-      event,
-      data,
-      time: Date.now(),
-    })
-
-    // Keep only the last 100 events
-    if (eventStore[roomId].events.length > 100) {
-      eventStore[roomId].events = eventStore[roomId].events.slice(-100)
-    }
+    // Socket.IO 서버에 이벤트 전송
+    const socket = getSocketInstance()
+    socket.emit(event, { ...data, roomId })
 
     return NextResponse.json({ success: true })
   } catch (error) {

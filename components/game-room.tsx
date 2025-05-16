@@ -20,9 +20,21 @@ interface GameRoomProps {
   socket: Socket | null
   roomId: string
   nickname: string
+  isOfflineMode?: boolean
+  offlineGame?: any
 }
 
-export function GameRoom({ players, role, day, phase, socket, roomId, nickname }: GameRoomProps) {
+export function GameRoom({
+  players,
+  role,
+  day,
+  phase,
+  socket,
+  roomId,
+  nickname,
+  isOfflineMode = false,
+  offlineGame,
+}: GameRoomProps) {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [timeLeft, setTimeLeft] = useState(120)
@@ -31,8 +43,8 @@ export function GameRoom({ players, role, day, phase, socket, roomId, nickname }
   const [mafiaTarget, setMafiaTarget] = useState<string | null>(null)
   const [systemMessages, setSystemMessages] = useState<string[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const [currentPhase, setPhase] = useState(phase)
-  const [currentDay, setDay] = useState(day)
+  const [setPhase, setPhaseState] = useState<"day" | "night">(phase)
+  const [setDay, setDayState] = useState<number>(day)
 
   const currentPlayer = players.find((p) => p.nickname === nickname)
   const isAlive = currentPlayer?.isAlive ?? true
@@ -48,6 +60,15 @@ export function GameRoom({ players, role, day, phase, socket, roomId, nickname }
   const mafiaPlayers = isMafia ? players.filter((p) => p.role === "mafia" && p.isAlive) : []
 
   useEffect(() => {
+    if (isOfflineMode && offlineGame) {
+      // Use offline game state
+      setMessages(offlineGame.messages)
+      setVoteCounts(offlineGame.voteCounts)
+      setTimeLeft(offlineGame.timeLeft)
+      setSystemMessages(offlineGame.systemMessages)
+      return
+    }
+
     if (socket) {
       socket.on("chatMessage", (message: ChatMessage) => {
         setMessages((prev) => [...prev, message])
@@ -73,8 +94,8 @@ export function GameRoom({ players, role, day, phase, socket, roomId, nickname }
       socket.on(
         "phaseChange",
         ({ phase, day, timeLeft }: { phase: "day" | "night"; day: number; timeLeft: number }) => {
-          setPhase(phase)
-          setDay(day)
+          setPhaseState(phase)
+          setDayState(day)
           setTimeLeft(timeLeft)
           setVotedFor(null)
           setMafiaTarget(null)
@@ -95,7 +116,7 @@ export function GameRoom({ players, role, day, phase, socket, roomId, nickname }
         socket.off("timeUpdate")
       }
     }
-  }, [socket])
+  }, [socket, isOfflineMode, offlineGame])
 
   // Auto scroll to bottom when new messages arrive
   useEffect(() => {
@@ -104,39 +125,51 @@ export function GameRoom({ players, role, day, phase, socket, roomId, nickname }
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !socket || !canChat) return
+    if (!message.trim() || !canChat) return
 
-    socket.emit("sendMessage", {
-      roomId,
-      sender: nickname,
-      content: message,
-      isMafiaChat: phase === "night" && isMafia,
-    })
+    if (isOfflineMode && offlineGame) {
+      offlineGame.sendMessage(message, phase === "night" && isMafia)
+    } else if (socket) {
+      socket.emit("sendMessage", {
+        roomId,
+        sender: nickname,
+        content: message,
+        isMafiaChat: phase === "night" && isMafia,
+      })
+    }
 
     setMessage("")
   }
 
   const handleVote = (targetNickname: string) => {
-    if (!socket || !canVote) return
+    if (!canVote) return
 
-    socket.emit("vote", {
-      roomId,
-      voter: nickname,
-      target: targetNickname,
-    })
-
-    setVotedFor(targetNickname)
+    if (isOfflineMode && offlineGame) {
+      offlineGame.handleVote(nickname, targetNickname)
+      setVotedFor(targetNickname)
+    } else if (socket) {
+      socket.emit("vote", {
+        roomId,
+        voter: nickname,
+        target: targetNickname,
+      })
+      setVotedFor(targetNickname)
+    }
   }
 
   const handleMafiaTarget = (targetNickname: string) => {
-    if (!socket || !canTarget) return
+    if (!canTarget) return
 
-    socket.emit("mafiaTarget", {
-      roomId,
-      target: targetNickname,
-    })
-
-    setMafiaTarget(targetNickname)
+    if (isOfflineMode && offlineGame) {
+      offlineGame.handleMafiaTarget(targetNickname)
+      setMafiaTarget(targetNickname)
+    } else if (socket) {
+      socket.emit("mafiaTarget", {
+        roomId,
+        target: targetNickname,
+      })
+      setMafiaTarget(targetNickname)
+    }
   }
 
   return (

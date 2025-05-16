@@ -7,9 +7,11 @@ import { WaitingRoom } from "@/components/waiting-room"
 import { RoleReveal } from "@/components/role-reveal"
 import { GameOver } from "@/components/game-over"
 import { useSocket } from "@/hooks/use-socket"
+import { useOfflineGame } from "@/hooks/use-offline-game"
 import type { Player, GameState } from "@/types/game"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react"
+import { FallbackNotice } from "@/components/fallback-notice"
 
 export default function RoomPage() {
   const params = useParams()
@@ -23,8 +25,25 @@ export default function RoomPage() {
   const [phase, setPhase] = useState<"day" | "night">("day")
   const [isHost, setIsHost] = useState(false)
   const [nickname, setNickname] = useState("")
+  const [isOfflineMode, setIsOfflineMode] = useState(false)
+  const [playerCount, setPlayerCount] = useState(4)
 
-  const { socket, isConnected, error, connectionDetails } = useSocket(roomId)
+  // Check if we're in offline mode
+  useEffect(() => {
+    const offlineMode = roomId.startsWith("offline-") || sessionStorage.getItem("offlineMode") === "true"
+    setIsOfflineMode(offlineMode)
+
+    if (offlineMode) {
+      const storedPlayerCount = Number.parseInt(sessionStorage.getItem("playerCount") || "4")
+      setPlayerCount(storedPlayerCount)
+    }
+  }, [roomId])
+
+  // Get socket connection (will be bypassed in offline mode)
+  const { socket, isConnected, error } = useSocket(roomId)
+
+  // Get offline game logic if in offline mode
+  const offlineGame = useOfflineGame(roomId, nickname, playerCount)
 
   useEffect(() => {
     // Get nickname from sessionStorage
@@ -39,6 +58,18 @@ export default function RoomPage() {
     setNickname(storedNickname)
     setIsHost(storedIsHost)
 
+    // If in offline mode, use offline game state
+    if (isOfflineMode) {
+      setGameState(offlineGame.gameState)
+      setPlayers(offlineGame.players)
+      setRole(offlineGame.role)
+      setWinner(offlineGame.winner)
+      setDay(offlineGame.day)
+      setPhase(offlineGame.phase)
+      return
+    }
+
+    // Otherwise use socket connection
     if (socket && isConnected) {
       // Join the room
       socket.emit("joinRoom", { roomId, nickname: storedNickname, isHost: storedIsHost })
@@ -85,10 +116,12 @@ export default function RoomPage() {
         socket.off("gameStateUpdate")
       }
     }
-  }, [socket, isConnected, roomId, router])
+  }, [socket, isConnected, roomId, router, isOfflineMode, offlineGame])
 
   // Handle disconnection
   useEffect(() => {
+    if (isOfflineMode) return // Skip for offline mode
+
     const handleBeforeUnload = () => {
       if (socket) {
         socket.emit("leaveRoom", { roomId, nickname })
@@ -103,7 +136,7 @@ export default function RoomPage() {
         socket.emit("leaveRoom", { roomId, nickname })
       }
     }
-  }, [socket, roomId, nickname])
+  }, [socket, roomId, nickname, isOfflineMode])
 
   const handleRefresh = () => {
     window.location.reload()
@@ -113,7 +146,8 @@ export default function RoomPage() {
     router.push("/")
   }
 
-  if (!isConnected) {
+  // Show loading state for online mode
+  if (!isOfflineMode && !isConnected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
         <div className="text-center space-y-4 max-w-md w-full">
@@ -125,20 +159,6 @@ export default function RoomPage() {
               <AlertCircle className="h-8 w-8 mx-auto mb-2" />
               <p className="font-bold text-lg mb-2">연결 오류</p>
               <p className="whitespace-pre-line mb-4">{error}</p>
-
-              <div className="bg-black/30 p-4 rounded-md text-left text-xs font-mono mb-6 overflow-auto max-h-32">
-                <p>서버 URL: {connectionDetails.url}</p>
-                <p>연결 시도: {connectionDetails.attempts}/5</p>
-                <p>브라우저: {navigator.userAgent}</p>
-              </div>
-
-              <p className="text-sm mb-6">
-                이 오류는 다음과 같은 이유로 발생할 수 있습니다:
-                <br />- 서버가 실행 중이지 않음
-                <br />- 네트워크 연결 문제
-                <br />- CORS 설정 문제
-                <br />- 방화벽 또는 보안 설정
-              </p>
 
               <div className="flex flex-col space-y-2">
                 <Button onClick={handleRefresh} className="w-full">
@@ -155,30 +175,61 @@ export default function RoomPage() {
     )
   }
 
+  // Render appropriate component based on game state
   if (gameState === "waiting") {
-    return <WaitingRoom players={players} roomId={roomId} isHost={isHost} socket={socket} />
+    return (
+      <>
+        {isOfflineMode && <FallbackNotice />}
+        <WaitingRoom
+          players={isOfflineMode ? offlineGame.players : players}
+          roomId={roomId}
+          isHost={isHost}
+          socket={socket}
+          isOfflineMode={isOfflineMode}
+          onStartGame={isOfflineMode ? offlineGame.startGame : undefined}
+        />
+      </>
+    )
   }
 
   if (gameState === "roleReveal") {
-    return <RoleReveal role={role} />
+    return <RoleReveal role={isOfflineMode ? offlineGame.role : role} />
   }
 
   if (gameState === "playing") {
     return (
-      <GameRoom
-        players={players}
-        role={role}
-        day={day}
-        phase={phase}
-        socket={socket}
-        roomId={roomId}
-        nickname={nickname}
-      />
+      <>
+        {isOfflineMode && <FallbackNotice />}
+        <GameRoom
+          players={isOfflineMode ? offlineGame.players : players}
+          role={isOfflineMode ? offlineGame.role : role}
+          day={isOfflineMode ? offlineGame.day : day}
+          phase={isOfflineMode ? offlineGame.phase : phase}
+          socket={socket}
+          roomId={roomId}
+          nickname={nickname}
+          isOfflineMode={isOfflineMode}
+          offlineGame={isOfflineMode ? offlineGame : undefined}
+        />
+      </>
     )
   }
 
   if (gameState === "gameOver") {
-    return <GameOver winner={winner} players={players} socket={socket} roomId={roomId} isHost={isHost} />
+    return (
+      <>
+        {isOfflineMode && <FallbackNotice />}
+        <GameOver
+          winner={isOfflineMode ? offlineGame.winner : winner}
+          players={isOfflineMode ? offlineGame.players : players}
+          socket={socket}
+          roomId={roomId}
+          isHost={isHost}
+          isOfflineMode={isOfflineMode}
+          onRestartGame={isOfflineMode ? offlineGame.restartGame : undefined}
+        />
+      </>
+    )
   }
 
   return null

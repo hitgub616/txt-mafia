@@ -12,13 +12,17 @@ interface WaitingRoomProps {
   roomId: string
   isHost: boolean
   socket: Socket | null
+  isOfflineMode?: boolean
+  onStartGame?: () => void
 }
 
-export function WaitingRoom({ players, roomId, isHost, socket }: WaitingRoomProps) {
+export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = false, onStartGame }: WaitingRoomProps) {
   const [copied, setCopied] = useState(false)
 
   const handleStartGame = () => {
-    if (socket) {
+    if (isOfflineMode && onStartGame) {
+      onStartGame()
+    } else if (socket) {
       socket.emit("startGame", { roomId })
     }
   }
@@ -37,12 +41,14 @@ export function WaitingRoom({ players, roomId, isHost, socket }: WaitingRoomProp
         <CardHeader>
           <CardTitle className="flex justify-between items-center">
             대기실
-            <Button variant="outline" size="sm" onClick={copyRoomId}>
-              {copied ? <CheckIcon className="h-4 w-4 mr-1" /> : <CopyIcon className="h-4 w-4 mr-1" />}
-              {copied ? "복사됨" : "방 ID 복사"}
-            </Button>
+            {!isOfflineMode && (
+              <Button variant="outline" size="sm" onClick={copyRoomId}>
+                {copied ? <CheckIcon className="h-4 w-4 mr-1" /> : <CopyIcon className="h-4 w-4 mr-1" />}
+                {copied ? "복사됨" : "방 ID 복사"}
+              </Button>
+            )}
           </CardTitle>
-          <CardDescription>방 ID: {roomId}</CardDescription>
+          <CardDescription>{isOfflineMode ? "오프라인 모드" : `방 ID: ${roomId}`}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

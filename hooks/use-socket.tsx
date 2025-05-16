@@ -9,7 +9,18 @@ export function useSocket(roomId: string) {
   const [error, setError] = useState<string | null>(null)
   const [connectionAttempts, setConnectionAttempts] = useState(0)
 
+  // Check if we're in offline mode
+  const isOfflineMode =
+    (typeof window !== "undefined" && roomId.startsWith("offline-")) || sessionStorage.getItem("offlineMode") === "true"
+
   useEffect(() => {
+    // If in offline mode, don't attempt to connect
+    if (isOfflineMode) {
+      console.log("Offline mode detected - skipping Socket.IO connection")
+      setIsConnected(true) // Simulate connected state
+      return () => {} // Empty cleanup function
+    }
+
     // Reset error state
     setError(null)
 
@@ -17,7 +28,7 @@ export function useSocket(roomId: string) {
     const socketUrl =
       window.location.hostname === "localhost"
         ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
-        : "https://txtmafiav0-production.up.railway.app"
+        : `${window.location.protocol}//${window.location.host}/api/socket` // Use Vercel API route in production
 
     console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
 
@@ -61,18 +72,45 @@ export function useSocket(roomId: string) {
       console.log("Cleaning up socket connection")
       socketInstance.disconnect()
     }
-  }, [roomId, connectionAttempts])
+  }, [roomId, connectionAttempts, isOfflineMode])
 
   // Retry connection if failed
   useEffect(() => {
-    if (error && connectionAttempts < 5) {
+    if (!isOfflineMode && error && connectionAttempts < 5) {
       const retryTimer = setTimeout(() => {
         console.log(`Retrying connection (Attempt ${connectionAttempts + 1}/5)...`)
       }, 3000)
 
       return () => clearTimeout(retryTimer)
     }
-  }, [error, connectionAttempts])
+  }, [error, connectionAttempts, isOfflineMode])
+
+  // For offline mode, return a mock socket
+  if (isOfflineMode) {
+    return {
+      socket: {
+        emit: (event: string, data: any) => {
+          console.log(`[Offline Mode] Emitting event: ${event}`, data)
+          // You could implement offline mode logic here
+          return true
+        },
+        on: (event: string, callback: Function) => {
+          console.log(`[Offline Mode] Registered listener for event: ${event}`)
+          return () => {}
+        },
+        off: (event: string) => {
+          console.log(`[Offline Mode] Removed listener for event: ${event}`)
+          return true
+        },
+      } as unknown as Socket,
+      isConnected: true,
+      error: null,
+      connectionDetails: {
+        url: "offline-mode",
+        attempts: 0,
+      },
+    }
+  }
 
   return {
     socket,
@@ -82,7 +120,7 @@ export function useSocket(roomId: string) {
       url:
         window.location.hostname === "localhost"
           ? `http://${window.location.hostname}:3001`
-          : "https://txtmafiav0-production.up.railway.app",
+          : `${window.location.protocol}//${window.location.host}/api/socket`,
       attempts: connectionAttempts,
     },
   }

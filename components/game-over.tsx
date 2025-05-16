@@ -13,13 +13,25 @@ interface GameOverProps {
   socket: Socket | null
   roomId: string
   isHost: boolean
+  isOfflineMode?: boolean
+  onRestartGame?: () => void
 }
 
-export function GameOver({ winner, players, socket, roomId, isHost }: GameOverProps) {
+export function GameOver({
+  winner,
+  players,
+  socket,
+  roomId,
+  isHost,
+  isOfflineMode = false,
+  onRestartGame,
+}: GameOverProps) {
   const router = useRouter()
 
   const handlePlayAgain = () => {
-    if (socket) {
+    if (isOfflineMode && onRestartGame) {
+      onRestartGame()
+    } else if (socket) {
       socket.emit("restartGame", { roomId })
     }
   }
@@ -27,6 +39,8 @@ export function GameOver({ winner, players, socket, roomId, isHost }: GameOverPr
   const handleExit = () => {
     sessionStorage.removeItem("nickname")
     sessionStorage.removeItem("isHost")
+    sessionStorage.removeItem("offlineMode")
+    sessionStorage.removeItem("playerCount")
     router.push("/")
   }
 
