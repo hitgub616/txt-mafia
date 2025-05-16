@@ -4,15 +4,40 @@ const { Server } = require("socket.io")
 const cors = require("cors")
 
 const app = express()
-app.use(cors())
+
+// 더 자세한 CORS 설정
+app.use(
+  cors({
+    origin: "*", // 모든 출처 허용
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+)
+
+// 기본 라우트 추가
+app.get("/", (req, res) => {
+  res.send("Mafia Game Socket.IO Server is running")
+})
+
+// 상태 확인 라우트 추가
+app.get("/status", (req, res) => {
+  res.json({
+    status: "online",
+    timestamp: new Date().toISOString(),
+    rooms: Array.from(rooms.keys()),
+  })
+})
 
 const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
     origin: "*", // Allow all origins in development
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   },
+  transports: ["websocket", "polling"], // WebSocket과 폴링 모두 지원
 })
 
 // Game state
@@ -520,6 +545,7 @@ server.listen(PORT, () => {
   CORS: All origins allowed
   
   Local URL: http://localhost:${PORT}
+  Railway URL: ${process.env.RAILWAY_STATIC_URL || "Not deployed on Railway yet"}
 ========================================
   `)
 })

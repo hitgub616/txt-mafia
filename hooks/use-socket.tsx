@@ -28,7 +28,7 @@ export function useSocket(roomId: string) {
     const socketUrl =
       window.location.hostname === "localhost"
         ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
-        : `https://v0-txt-mafia.vercel.app/api/socket` // Use Vercel API route in production
+        : process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app" // Use Railway in production
 
     console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
 
@@ -120,7 +120,7 @@ export function useSocket(roomId: string) {
       url:
         window.location.hostname === "localhost"
           ? `http://${window.location.hostname}:3001`
-          : `https://v0-txt-mafia.vercel.app/api/socket`,
+          : process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app",
       attempts: connectionAttempts,
     },
   }

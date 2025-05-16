@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: false,
   env: {
-    NEXT_PUBLIC_SOCKET_URL: "https://v0-txt-mafia.vercel.app/api/socket",
+    NEXT_PUBLIC_SOCKET_URL: "https://txtmafiav0-production.up.railway.app",
   },
   eslint: {
     ignoreDuringBuilds: true,

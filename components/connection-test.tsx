@@ -20,6 +20,9 @@ export function ConnectionTest() {
     message: null,
   })
 
+  // 환경 변수에서 Socket.IO 서버 URL 가져오기
+  const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "https://txtmafiav0-production.up.railway.app"
+
   const runTests = async () => {
     setIsLoading(true)
     setTestResults({
@@ -37,14 +40,14 @@ export function ConnectionTest() {
 
     try {
       // Test basic HTTP connectivity
-      const response = await fetch("https://v0-txt-mafia.vercel.app/api/socket", {
+      const response = await fetch(socketUrl, {
         method: "HEAD",
         mode: "no-cors",
       })
       serverReachable = true
 
       // Test Socket.IO connectivity
-      const socket = io("https://v0-txt-mafia.vercel.app/api/socket", {
+      const socket = io(socketUrl, {
         transports: ["websocket"],
         timeout: 5000,
         forceNew: true,
@@ -147,6 +150,14 @@ export function ConnectionTest() {
               <p>{testResults.message}</p>
             </div>
           )}
+
+          <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md text-sm">
+            <p className="font-medium text-blue-400 mb-1">서버 정보</p>
+            <p>URL: {socketUrl}</p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              이 서버는 Railway에 배포된 Socket.IO 서버로, 게임의 실시간 통신과 게임 로직을 처리합니다.
+            </p>
+          </div>
         </div>
       </CardContent>
       <CardFooter>
