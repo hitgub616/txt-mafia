@@ -13,10 +13,12 @@ const isDev = process.env.NODE_ENV === "development"
 
 const app = express()
 
-// CORS 설정 수정 - 모든 출처 허용 (개발 환경에서만)
+// CORS 설정 수정 - 로컬호스트 허용
 app.use(
   cors({
-    origin: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+    origin: isDev
+      ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -25,7 +27,11 @@ app.use(
 
 // 기본 라우트 추가
 app.get("/", (req, res) => {
-  res.send("Mafia Game Socket.IO Server is running")
+  res.json({
+    status: "online",
+    message: "Mafia Game Socket.IO Server is running",
+    timestamp: new Date().toISOString(),
+  })
 })
 
 // 상태 확인 라우트 추가
@@ -40,16 +46,20 @@ app.get("/status", (req, res) => {
       clientUrl: CLIENT_URL,
       nodeEnv: process.env.NODE_ENV,
       isDev,
-      corsOrigins: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+      corsOrigins: isDev
+        ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
+        : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     },
   })
 })
 
 const server = http.createServer(app)
-// Socket.IO 서버 설정 - 모든 출처 허용 (개발 환경에서만)
+// Socket.IO 서버 설정 - 로컬호스트 허용
 const io = new Server(server, {
   cors: {
-    origin: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+    origin: isDev
+      ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -580,15 +590,15 @@ function handlePlayerDisconnect(socketId, roomId) {
 server.listen(PORT, () => {
   console.log(`
 ========================================
-  Mafia Game Server
+ Mafia Game Server
 ========================================
-  Server running on port: ${PORT}
-  Environment: ${isDev ? "Development" : "Production"}
-  CORS: ${isDev ? "All origins allowed" : CLIENT_URL}
-  
-  Local URL: http://localhost:${PORT}
-  Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
-  Client URL: ${CLIENT_URL}
+ Server running on port: ${PORT}
+ Environment: ${isDev ? "Development" : "Production"}
+ CORS: ${isDev ? "All origins allowed" : CLIENT_URL}
+ 
+ Local URL: http://localhost:${PORT}
+ Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
+ Client URL: ${CLIENT_URL}
 ========================================
-  `)
+ `)
 })

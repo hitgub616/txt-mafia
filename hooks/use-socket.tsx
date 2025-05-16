@@ -12,10 +12,23 @@ export function useSocket(roomId: string) {
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [connectionAttempts, setConnectionAttempts] = useState(0)
+  const [socketUrl, setSocketUrl] = useState<string>(CLIENT_CONFIG.PUBLIC_SOCKET_URL)
 
   // Check if we're in offline mode
   const isOfflineMode =
     typeof window !== "undefined" && (roomId.startsWith("offline-") || sessionStorage.getItem("offlineMode") === "true")
+
+  // 소켓 URL 설정
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const url =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+          ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
+          : CLIENT_CONFIG.PUBLIC_SOCKET_URL // Use configured URL in production
+
+      setSocketUrl(url)
+    }
+  }, [])
 
   useEffect(() => {
     // 서버 사이드 렌더링 중에는 실행하지 않음
@@ -30,12 +43,6 @@ export function useSocket(roomId: string) {
 
     // Reset error state
     setError(null)
-
-    // Determine the correct Socket.IO URL based on the environment
-    const socketUrl =
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-        ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
-        : CLIENT_CONFIG.PUBLIC_SOCKET_URL // Use configured URL in production
 
     console.log(`[Socket.IO] 연결 시도: ${socketUrl}`)
     console.log(`[Socket.IO] 환경 변수: NEXT_PUBLIC_SOCKET_URL=${process.env.NEXT_PUBLIC_SOCKET_URL}`)
@@ -118,7 +125,7 @@ export function useSocket(roomId: string) {
         globalSocketInstance = null
       }
     }
-  }, [roomId, connectionAttempts, isOfflineMode])
+  }, [roomId, connectionAttempts, isOfflineMode, socketUrl])
 
   // Retry connection if failed
   useEffect(() => {
@@ -165,12 +172,7 @@ export function useSocket(roomId: string) {
     isConnected,
     error,
     connectionDetails: {
-      url:
-        typeof window !== "undefined"
-          ? window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-            ? `http://${window.location.hostname}:3001`
-            : CLIENT_CONFIG.PUBLIC_SOCKET_URL
-          : CLIENT_CONFIG.PUBLIC_SOCKET_URL,
+      url: socketUrl,
       attempts: connectionAttempts,
       clientUrl: typeof window !== "undefined" ? window.location.origin : "",
     },
