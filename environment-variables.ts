@@ -15,7 +15,7 @@ export const SERVER_CONFIG = {
   PORT: process.env.PORT || 3001,
 
   // 클라이언트 URL (CORS 설정용)
-  CLIENT_URL: process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app",
+  CLIENT_URL: process.env.CLIENT_URL || "https://v0-txt-mafia.vercel.app",
 }
 
 // 클라이언트 관련 환경 변수
@@ -27,7 +27,7 @@ export const CLIENT_CONFIG = {
   IS_DEV: process.env.NODE_ENV === "development",
 
   // 클라이언트 URL
-  CLIENT_URL: process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app",
+  CLIENT_URL: process.env.CLIENT_URL || "https://v0-txt-mafia.vercel.app",
 }
 
 /**

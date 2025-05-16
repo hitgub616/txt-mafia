@@ -5,7 +5,7 @@ const cors = require("cors")
 
 // 환경 변수 설정
 const PORT = process.env.PORT || 3001
-const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"
+const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia.vercel.app"
 const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || ""
 
 // 개발 환경 확인
@@ -13,12 +13,10 @@ const isDev = process.env.NODE_ENV === "development"
 
 const app = express()
 
-// CORS 설정 수정 - 로컬호스트 허용
+// CORS 설정 수정 - 모든 출처 허용 (개발 환경에서만)
 app.use(
   cors({
-    origin: isDev
-      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
-      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
+    origin: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -42,20 +40,16 @@ app.get("/status", (req, res) => {
       clientUrl: CLIENT_URL,
       nodeEnv: process.env.NODE_ENV,
       isDev,
-      corsOrigins: isDev
-        ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
-        : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
+      corsOrigins: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     },
   })
 })
 
 const server = http.createServer(app)
-// Socket.IO 서버 설정 - 로컬호스트 허용
+// Socket.IO 서버 설정 - 모든 출처 허용 (개발 환경에서만)
 const io = new Server(server, {
   cors: {
-    origin: isDev
-      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
-      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
+    origin: isDev ? "*" : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,

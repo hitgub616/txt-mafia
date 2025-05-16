@@ -11,6 +11,7 @@ export function ConnectionTest() {
   const [isLoading, setIsLoading] = useState(true)
   const [socketUrl, setSocketUrl] = useState("")
   const [clientUrl, setClientUrl] = useState("")
+  const [serverStatus, setServerStatus] = useState<"checking" | "running" | "not-running">("checking")
   const [testResults, setTestResults] = useState<{
     serverReachable: boolean | null
     websocketSupported: boolean | null
@@ -37,11 +38,40 @@ export function ConnectionTest() {
     setSocketUrl(url)
     setClientUrl(typeof window !== "undefined" ? window.location.origin : "")
 
+    // 서버 상태 확인
+    checkServerStatus(url)
+
     // 초기 테스트 실행
     if (typeof window !== "undefined") {
       runTests()
     }
   }, [])
+
+  // 서버가 실행 중인지 확인
+  const checkServerStatus = async (url: string) => {
+    try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+      const response = await fetch(`${url}`, {
+        method: "GET",
+        signal: controller.signal,
+      }).catch(() => null)
+
+      clearTimeout(timeoutId)
+
+      if (response && response.ok) {
+        setServerStatus("running")
+        console.log("서버가 실행 중입니다.")
+      } else {
+        setServerStatus("not-running")
+        console.error("서버가 실행되지 않았거나 응답하지 않습니다.")
+      }
+    } catch (error) {
+      setServerStatus("not-running")
+      console.error("서버 상태 확인 중 오류:", error)
+    }
+  }
 
   const runTests = async () => {
     if (typeof window === "undefined") return
@@ -63,27 +93,45 @@ export function ConnectionTest() {
     let details = null
 
     try {
-      console.log(`[연결 테스트] 서버 URL: ${socketUrl}`)
+      // 현재 URL 확인
+      const url =
+        window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+          ? `http://${window.location.hostname}:3001`
+          : CLIENT_CONFIG.PUBLIC_SOCKET_URL
+
+      console.log(`[연결 테스트] 서버 URL: ${url}`)
       console.log(`[연결 테스트] 클라이언트 URL: ${window.location.origin}`)
       console.log(`[연결 테스트] 환경 변수: NEXT_PUBLIC_SOCKET_URL=${process.env.NEXT_PUBLIC_SOCKET_URL}`)
 
+      // 서버 상태 확인
+      await checkServerStatus(url)
+
       // Test basic HTTP connectivity
       try {
-        const response = await fetch(`${socketUrl}/status`, {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+        const response = await fetch(`${url}/status`, {
           method: "GET",
           mode: "cors",
           headers: {
             Origin: window.location.origin,
           },
+          signal: controller.signal,
+        }).catch((err) => {
+          console.error("Fetch error:", err)
+          return null
         })
 
-        if (response.ok) {
+        clearTimeout(timeoutId)
+
+        if (response && response.ok) {
           const data = await response.json()
           serverReachable = true
           details = `서버 상태: ${JSON.stringify(data, null, 2)}`
           console.log("[연결 테스트] 서버 상태:", data)
         } else {
-          throw new Error(`서버 응답 코드: ${response.status}`)
+          throw new Error(`서버 응답 코드: ${response ? response.status : "응답 없음"}`)
         }
       } catch (err) {
         console.error("[연결 테스트] HTTP 연결 오류:", err)
@@ -91,43 +139,49 @@ export function ConnectionTest() {
       }
 
       // Test Socket.IO connectivity
-      const socket = io(socketUrl, {
-        transports: ["websocket"],
-        timeout: 5000,
-        forceNew: true,
-        extraHeaders: {
-          Origin: window.location.origin,
-        },
-      })
+      try {
+        const socket = io(url, {
+          transports: ["websocket", "polling"],
+          timeout: 5000,
+          forceNew: true,
+          extraHeaders: {
+            Origin: window.location.origin,
+          },
+        })
 
-      // Set up a promise to wait for connection or error
-      const connectionResult = await new Promise<{ success: boolean; transport?: string; error?: string }>(
-        (resolve) => {
-          socket.on("connect", () => {
-            resolve({ success: true, transport: socket.io.engine.transport.name })
-            socket.disconnect()
-          })
+        // Set up a promise to wait for connection or error
+        const connectionResult = await new Promise<{ success: boolean; transport?: string; error?: string }>(
+          (resolve) => {
+            socket.on("connect", () => {
+              resolve({ success: true, transport: socket.io.engine.transport.name })
+              socket.disconnect()
+            })
 
-          socket.on("connect_error", (err) => {
-            resolve({ success: false, error: err.message })
-            socket.disconnect()
-          })
+            socket.on("connect_error", (err) => {
+              resolve({ success: false, error: err.message })
+              socket.disconnect()
+            })
 
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            resolve({ success: false, error: "Connection timeout" })
-            socket.disconnect()
-          }, 5000)
-        },
-      )
+            // Timeout after 5 seconds
+            setTimeout(() => {
+              resolve({ success: false, error: "Connection timeout" })
+              socket.disconnect()
+            }, 5000)
+          },
+        )
 
-      if (connectionResult.success) {
-        corsAllowed = true
-        websocketSupported = connectionResult.transport === "websocket"
-        message = `연결 성공! 전송 방식: ${connectionResult.transport}`
-      } else {
-        message = `연결 실패: ${connectionResult.error}`
-        details = `${details}\n\nSocket.IO 연결 오류: ${connectionResult.error}`
+        if (connectionResult.success) {
+          corsAllowed = true
+          websocketSupported = connectionResult.transport === "websocket"
+          message = `연결 성공! 전송 방식: ${connectionResult.transport}`
+        } else {
+          message = `연결 실패: ${connectionResult.error}`
+          details = `${details || ""}\n\nSocket.IO 연결 오류: ${connectionResult.error}`
+        }
+      } catch (error) {
+        console.error("[연결 테스트] Socket.IO 연결 오류:", error)
+        message = `Socket.IO 연결 중 오류 발생: ${error instanceof Error ? error.message : String(error)}`
+        details = `${details || ""}\n\nSocket.IO 오류: ${error instanceof Error ? error.stack : String(error)}`
       }
     } catch (error) {
       message = `테스트 중 오류 발생: ${error instanceof Error ? error.message : String(error)}`
@@ -152,6 +206,23 @@ export function ConnectionTest() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* 서버 상태 표시 */}
+          <div className="p-3 rounded-md bg-secondary/50">
+            <p className="font-medium mb-1">서버 상태:</p>
+            {serverStatus === "checking" ? (
+              <p className="text-yellow-400">확인 중...</p>
+            ) : serverStatus === "running" ? (
+              <p className="text-green-400">실행 중</p>
+            ) : (
+              <p className="text-red-400">
+                실행되지 않음 - 서버를 먼저 실행해주세요:
+                <code className="block mt-1 p-2 bg-gray-800 rounded text-xs">
+                  NODE_ENV=development node server/index.js
+                </code>
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center justify-between">
             <span>서버 접근 가능</span>
             {isLoading ? (
