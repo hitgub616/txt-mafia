@@ -13,23 +13,22 @@ export function useSocket(roomId: string) {
     // Reset error state
     setError(null)
 
-    // Use the Railway URL directly
-    const socketUrl = "https://txtmafiav0-production.up.railway.app"
+    // Determine the correct Socket.IO URL based on the environment
+    const socketUrl =
+      window.location.hostname === "localhost"
+        ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
+        : "https://txtmafiav0-production.up.railway.app"
 
-    console.log(`Connecting to Socket.IO server at: ${socketUrl} (Attempt: ${connectionAttempts + 1})`)
+    console.log(`Connecting to Socket.IO server at: ${socketUrl}`)
 
     // Create socket connection with explicit options
     const socketInstance = io(socketUrl, {
       query: { roomId },
-      transports: ["polling"], // Use only polling since WebSocket is not working
+      transports: ["websocket", "polling"], // Try WebSocket first, then fallback to polling
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000, // Increased timeout
       withCredentials: false, // Disable credentials for cross-origin requests
-      forceNew: true, // Force a new connection
-      extraHeaders: {
-        "Access-Control-Allow-Origin": "*", // Try to bypass CORS (client-side only)
-      },
     })
 
     // Set up event listeners
@@ -80,7 +79,10 @@ export function useSocket(roomId: string) {
     isConnected,
     error,
     connectionDetails: {
-      url: "https://txtmafiav0-production.up.railway.app",
+      url:
+        window.location.hostname === "localhost"
+          ? `http://${window.location.hostname}:3001`
+          : "https://txtmafiav0-production.up.railway.app",
       attempts: connectionAttempts,
     },
   }
