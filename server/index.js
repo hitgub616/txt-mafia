@@ -5,7 +5,7 @@ const cors = require("cors")
 
 // 환경 변수 설정
 const PORT = process.env.PORT || 3001
-const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia.vercel.app"
+const CLIENT_URL = process.env.CLIENT_URL || "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"
 const RAILWAY_URL = process.env.RAILWAY_STATIC_URL || ""
 
 // 개발 환경 확인
@@ -17,8 +17,8 @@ const app = express()
 app.use(
   cors({
     origin: isDev
-      ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
-      : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -27,11 +27,7 @@ app.use(
 
 // 기본 라우트 추가
 app.get("/", (req, res) => {
-  res.json({
-    status: "online",
-    message: "Mafia Game Socket.IO Server is running",
-    timestamp: new Date().toISOString(),
-  })
+  res.send("Mafia Game Socket.IO Server is running")
 })
 
 // 상태 확인 라우트 추가
@@ -47,8 +43,8 @@ app.get("/status", (req, res) => {
       nodeEnv: process.env.NODE_ENV,
       isDev,
       corsOrigins: isDev
-        ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
-        : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+        ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+        : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     },
   })
 })
@@ -58,8 +54,8 @@ const server = http.createServer(app)
 const io = new Server(server, {
   cors: {
     origin: isDev
-      ? ["http://localhost:3000", "http://localhost:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "*"]
-      : [CLIENT_URL, "https://v0-txt-mafia.vercel.app"],
+      ? ["http://localhost:3000", "http://127.0.0.1:3000", "*"]
+      : [CLIENT_URL, "https://v0-txt-mafia-o3hnz9r54-ryan616s-projects.vercel.app"],
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -590,15 +586,15 @@ function handlePlayerDisconnect(socketId, roomId) {
 server.listen(PORT, () => {
   console.log(`
 ========================================
- Mafia Game Server
+  Mafia Game Server
 ========================================
- Server running on port: ${PORT}
- Environment: ${isDev ? "Development" : "Production"}
- CORS: ${isDev ? "All origins allowed" : CLIENT_URL}
- 
- Local URL: http://localhost:${PORT}
- Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
- Client URL: ${CLIENT_URL}
+  Server running on port: ${PORT}
+  Environment: ${isDev ? "Development" : "Production"}
+  CORS: ${isDev ? "All origins allowed" : CLIENT_URL}
+  
+  Local URL: http://localhost:${PORT}
+  Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
+  Client URL: ${CLIENT_URL}
 ========================================
- `)
+  `)
 })
