@@ -15,6 +15,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Add this to prevent prerendering of pages that use window
+  output: 'export',
 }
 
 export default nextConfig

@@ -1,4 +1,11 @@
-import { ConnectionTest } from "@/components/connection-test"
+// Change the file to use 'use client' directive and dynamic imports
+
+import dynamic from "next/dynamic"
+
+// Dynamically import the ConnectionTest component with SSR disabled
+const ConnectionTest = dynamic(() => import("@/components/connection-test").then((mod) => mod.ConnectionTest), {
+  ssr: false,
+})
 
 export default function TestPage() {
   return (

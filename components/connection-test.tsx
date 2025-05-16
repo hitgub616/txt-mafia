@@ -23,13 +23,19 @@ export function ConnectionTest() {
     details: null,
   })
 
-  // 환경 변수에서 Socket.IO 서버 URL 가져오기
-  const socketUrl =
-    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+  // Get Socket.IO server URL safely
+  const getSocketUrl = () => {
+    if (typeof window === "undefined") return ""
+
+    return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
       ? `http://${window.location.hostname}:3001`
       : CLIENT_CONFIG.PUBLIC_SOCKET_URL
+  }
 
   const runTests = async () => {
+    // Skip if not in browser
+    if (typeof window === "undefined") return
+
     setIsLoading(true)
     setTestResults({
       serverReachable: null,
@@ -38,6 +44,8 @@ export function ConnectionTest() {
       message: null,
       details: null,
     })
+
+    const socketUrl = getSocketUrl()
 
     // Test server reachability
     let serverReachable = false
@@ -129,7 +137,10 @@ export function ConnectionTest() {
   }
 
   useEffect(() => {
-    runTests()
+    // Only run in browser
+    if (typeof window !== "undefined") {
+      runTests()
+    }
   }, [])
 
   return (
@@ -193,8 +204,8 @@ export function ConnectionTest() {
 
           <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md text-sm">
             <p className="font-medium text-blue-400 mb-1">서버 정보</p>
-            <p>Socket URL: {socketUrl}</p>
-            <p>Client URL: {window.location.origin}</p>
+            <p>Socket URL: {typeof window !== "undefined" ? getSocketUrl() : "Loading..."}</p>
+            <p>Client URL: {typeof window !== "undefined" ? window.location.origin : "Loading..."}</p>
             <p>NEXT_PUBLIC_SOCKET_URL: {process.env.NEXT_PUBLIC_SOCKET_URL || "(설정되지 않음)"}</p>
             <p className="mt-2 text-xs text-muted-foreground">
               이 서버는 Socket.IO 서버로, 게임의 실시간 통신과 게임 로직을 처리합니다.
