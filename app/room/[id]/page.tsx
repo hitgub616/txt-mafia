@@ -28,6 +28,7 @@ export default function RoomPage() {
   const [isOfflineMode, setIsOfflineMode] = useState(false)
   const [playerCount, setPlayerCount] = useState(4)
   const [hasJoined, setHasJoined] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   // Check if we're in offline mode
   useEffect(() => {
@@ -46,6 +47,7 @@ export default function RoomPage() {
   // Get offline game logic if in offline mode
   const offlineGame = useOfflineGame(roomId, nickname, playerCount)
 
+  // 초기화 및 닉네임 설정
   useEffect(() => {
     // Get nickname from sessionStorage
     const storedNickname = sessionStorage.getItem("nickname")
@@ -58,6 +60,7 @@ export default function RoomPage() {
 
     setNickname(storedNickname)
     setIsHost(storedIsHost)
+    setIsInitialized(true)
 
     // If in offline mode, use offline game state
     if (isOfflineMode) {
@@ -67,60 +70,78 @@ export default function RoomPage() {
       setWinner(offlineGame.winner)
       setDay(offlineGame.day)
       setPhase(offlineGame.phase)
-      return
     }
   }, [router, isOfflineMode, offlineGame])
 
-  // 소켓 연결 및 방 참가 로직을 별도의 useEffect로 분리
+  // 소켓 연결 및 방 참가 로직
   useEffect(() => {
-    if (isOfflineMode || !socket || !isConnected || !nickname || hasJoined) return
+    if (!isInitialized || isOfflineMode || !socket || !isConnected || !nickname) return
 
-    // Join the room
-    console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
-    socket.emit("joinRoom", { roomId, nickname, isHost })
-    setHasJoined(true)
+    // 방에 아직 참가하지 않았다면 참가 요청
+    if (!hasJoined) {
+      console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
 
-    // Listen for player updates
-    socket.on("playersUpdate", (updatedPlayers: Player[]) => {
+      // 호스트인 경우 로컬에서 플레이어 목록 초기화
+      if (isHost) {
+        const hostPlayer: Player = {
+          id: "local-id", // 소켓 연결 전이므로 임시 ID 사용
+          nickname: nickname,
+          isHost: true,
+          role: null,
+          isAlive: true,
+          vote: null,
+        }
+        setPlayers([hostPlayer]) // 호스트를 플레이어 목록에 즉시 추가
+      }
+
+      // 서버에 참가 요청
+      socket.emit("joinRoom", { roomId, nickname, isHost })
+      setHasJoined(true)
+    }
+
+    // 플레이어 목록 업데이트 이벤트 리스너
+    const handlePlayersUpdate = (updatedPlayers: Player[]) => {
       console.log("Received players update:", updatedPlayers)
       setPlayers(updatedPlayers)
-    })
-
-    // Listen for game state updates
-    socket.on(
-      "gameStateUpdate",
-      (data: {
-        state: GameState
-        role?: "mafia" | "citizen"
-        day?: number
-        phase?: "day" | "night"
-        winner?: "mafia" | "citizen"
-      }) => {
-        setGameState(data.state)
-
-        if (data.role) {
-          setRole(data.role)
-        }
-
-        if (data.day) {
-          setDay(data.day)
-        }
-
-        if (data.phase) {
-          setPhase(data.phase)
-        }
-
-        if (data.winner) {
-          setWinner(data.winner)
-        }
-      },
-    )
-
-    return () => {
-      socket.off("playersUpdate")
-      socket.off("gameStateUpdate")
     }
-  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined])
+
+    // 게임 상태 업데이트 이벤트 리스너
+    const handleGameStateUpdate = (data: {
+      state: GameState
+      role?: "mafia" | "citizen"
+      day?: number
+      phase?: "day" | "night"
+      winner?: "mafia" | "citizen"
+    }) => {
+      setGameState(data.state)
+
+      if (data.role) {
+        setRole(data.role)
+      }
+
+      if (data.day) {
+        setDay(data.day)
+      }
+
+      if (data.phase) {
+        setPhase(data.phase)
+      }
+
+      if (data.winner) {
+        setWinner(data.winner)
+      }
+    }
+
+    // 이벤트 리스너 등록
+    socket.on("playersUpdate", handlePlayersUpdate)
+    socket.on("gameStateUpdate", handleGameStateUpdate)
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      socket.off("playersUpdate", handlePlayersUpdate)
+      socket.off("gameStateUpdate", handleGameStateUpdate)
+    }
+  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined, isInitialized])
 
   // Handle disconnection
   useEffect(() => {
