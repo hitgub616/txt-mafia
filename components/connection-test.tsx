@@ -3,27 +3,20 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, XCircle, AlertTriangle, RefreshCw } from "lucide-react"
-import { io } from "socket.io-client"
+import { CheckCircle, XCircle, RefreshCw } from "lucide-react"
 import { CLIENT_CONFIG } from "@/environment-variables"
 
 export function ConnectionTest() {
   const [isLoading, setIsLoading] = useState(true)
-  const [testResults, setTestResults] = useState<{
-    serverReachable: boolean | null
-    websocketSupported: boolean | null
-    corsAllowed: boolean | null
-    message: string | null
-    details: string | null
-  }>({
-    serverReachable: null,
-    websocketSupported: null,
-    corsAllowed: null,
-    message: null,
-    details: null,
+  const [testResults, setTestResults] = useState({
+    serverReachable: false,
+    corsAllowed: false,
+    websocketSupported: false,
+    message: "",
+    details: "",
   })
 
-  // Get Socket.IO server URL safely
+  // 서버 URL 가져오기
   const getSocketUrl = () => {
     if (typeof window === "undefined") return ""
 
@@ -33,103 +26,82 @@ export function ConnectionTest() {
   }
 
   const runTests = async () => {
-    // Skip if not in browser
-    if (typeof window === "undefined") return
-
     setIsLoading(true)
     setTestResults({
-      serverReachable: null,
-      websocketSupported: null,
-      corsAllowed: null,
-      message: null,
-      details: null,
+      serverReachable: false,
+      corsAllowed: false,
+      websocketSupported: false,
+      message: "테스트 중...",
+      details: "",
     })
 
     const socketUrl = getSocketUrl()
-
-    // Test server reachability
+    let details = `서버 URL: ${socketUrl}\n`
     let serverReachable = false
     let corsAllowed = false
     let websocketSupported = false
-    let message = null
-    let details = null
+    let message = ""
 
     try {
-      console.log(`[연결 테스트] 서버 URL: ${socketUrl}`)
-      console.log(`[연결 테스트] 클라이언트 URL: ${window.location.origin}`)
-      console.log(`[연결 테스트] 환경 변수: NEXT_PUBLIC_SOCKET_URL=${process.env.NEXT_PUBLIC_SOCKET_URL}`)
-
-      // Test basic HTTP connectivity
+      // 1. 기본 HTTP 연결 테스트
       try {
         const response = await fetch(`${socketUrl}/status`, {
           method: "GET",
           mode: "cors",
-          headers: {
-            Origin: window.location.origin,
-          },
         })
 
         if (response.ok) {
           const data = await response.json()
           serverReachable = true
-          details = `서버 상태: ${JSON.stringify(data, null, 2)}`
-          console.log("[연결 테스트] 서버 상태:", data)
+          details += `서버 상태: ${JSON.stringify(data, null, 2)}\n`
         } else {
           throw new Error(`서버 응답 코드: ${response.status}`)
         }
       } catch (err) {
-        console.error("[연결 테스트] HTTP 연결 오류:", err)
-        details = `HTTP 연결 오류: ${err instanceof Error ? err.message : String(err)}`
+        details += `HTTP 연결 오류: ${err instanceof Error ? err.message : String(err)}\n`
       }
 
-      // Test Socket.IO connectivity
-      const socket = io(socketUrl, {
-        transports: ["websocket"],
-        timeout: 5000,
-        forceNew: true,
-        extraHeaders: {
-          Origin: window.location.origin,
-        },
-      })
-
-      // Set up a promise to wait for connection or error
-      const connectionResult = await new Promise<{ success: boolean; transport?: string; error?: string }>(
-        (resolve) => {
-          socket.on("connect", () => {
-            resolve({ success: true, transport: socket.io.engine.transport.name })
-            socket.disconnect()
-          })
-
-          socket.on("connect_error", (err) => {
-            resolve({ success: false, error: err.message })
-            socket.disconnect()
-          })
-
-          // Timeout after 5 seconds
-          setTimeout(() => {
-            resolve({ success: false, error: "Connection timeout" })
-            socket.disconnect()
-          }, 5000)
-        },
-      )
-
-      if (connectionResult.success) {
-        corsAllowed = true
-        websocketSupported = connectionResult.transport === "websocket"
-        message = `연결 성공! 전송 방식: ${connectionResult.transport}`
+      // 2. WebSocket 지원 확인 (브라우저 기능)
+      if (typeof WebSocket !== "undefined") {
+        websocketSupported = true
+        details += "브라우저가 WebSocket을 지원합니다.\n"
       } else {
-        message = `연결 실패: ${connectionResult.error}`
-        details = `${details}\n\nSocket.IO 연결 오류: ${connectionResult.error}`
+        details += "브라우저가 WebSocket을 지원하지 않습니다.\n"
+      }
+
+      // 3. CORS 테스트 (간단한 XHR 요청)
+      try {
+        const xhr = new XMLHttpRequest()
+        xhr.open("GET", `${socketUrl}/status`, false)
+        xhr.send(null)
+
+        if (xhr.status === 200) {
+          corsAllowed = true
+          details += "CORS가 허용됩니다.\n"
+        } else {
+          details += `CORS 테스트 실패: 상태 코드 ${xhr.status}\n`
+        }
+      } catch (err) {
+        details += `CORS 테스트 오류: ${err instanceof Error ? err.message : String(err)}\n`
+      }
+
+      // 결과 메시지 생성
+      if (serverReachable && corsAllowed && websocketSupported) {
+        message = "모든 테스트가 통과되었습니다! 게임 서버에 연결할 수 있습니다."
+      } else if (serverReachable) {
+        message = "서버에 연결할 수 있지만 일부 기능이 제한될 수 있습니다."
+      } else {
+        message = "서버에 연결할 수 없습니다. 네트워크 연결을 확인하세요."
       }
     } catch (error) {
       message = `테스트 중 오류 발생: ${error instanceof Error ? error.message : String(error)}`
-      details = `테스트 오류: ${error instanceof Error ? error.stack : String(error)}`
+      details += `테스트 오류: ${error instanceof Error ? error.stack : String(error)}`
     }
 
     setTestResults({
       serverReachable,
-      websocketSupported,
       corsAllowed,
+      websocketSupported,
       message,
       details,
     })
@@ -137,7 +109,6 @@ export function ConnectionTest() {
   }
 
   useEffect(() => {
-    // Only run in browser
     if (typeof window !== "undefined") {
       runTests()
     }
@@ -155,8 +126,6 @@ export function ConnectionTest() {
             <span>서버 접근 가능</span>
             {isLoading ? (
               <div className="animate-spin h-5 w-5 border-t-2 border-b-2 border-primary rounded-full"></div>
-            ) : testResults.serverReachable === null ? (
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
             ) : testResults.serverReachable ? (
               <CheckCircle className="h-5 w-5 text-green-500" />
             ) : (
@@ -168,8 +137,6 @@ export function ConnectionTest() {
             <span>CORS 허용</span>
             {isLoading ? (
               <div className="animate-spin h-5 w-5 border-t-2 border-b-2 border-primary rounded-full"></div>
-            ) : testResults.corsAllowed === null ? (
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
             ) : testResults.corsAllowed ? (
               <CheckCircle className="h-5 w-5 text-green-500" />
             ) : (
@@ -181,8 +148,6 @@ export function ConnectionTest() {
             <span>WebSocket 지원</span>
             {isLoading ? (
               <div className="animate-spin h-5 w-5 border-t-2 border-b-2 border-primary rounded-full"></div>
-            ) : testResults.websocketSupported === null ? (
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
             ) : testResults.websocketSupported ? (
               <CheckCircle className="h-5 w-5 text-green-500" />
             ) : (

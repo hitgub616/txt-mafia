@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import type { Socket } from "socket.io-client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,11 +18,6 @@ interface WaitingRoomProps {
 
 export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = false, onStartGame }: WaitingRoomProps) {
   const [copied, setCopied] = useState(false)
-
-  // 디버깅 로그 추가
-  useEffect(() => {
-    console.log("WaitingRoom rendered with players:", players)
-  }, [players])
 
   const handleStartGame = () => {
     if (isOfflineMode && onStartGame) {
