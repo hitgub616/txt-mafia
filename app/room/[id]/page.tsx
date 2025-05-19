@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { GameRoom } from "@/components/game-room"
 import { WaitingRoom } from "@/components/waiting-room"
@@ -29,6 +29,9 @@ export default function RoomPage() {
   const [playerCount, setPlayerCount] = useState(4)
   const [hasJoined, setHasJoined] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(0)
+
+  const eventListenersSetupRef = useRef(false)
 
   // Check if we're in offline mode
   useEffect(() => {
@@ -70,49 +73,26 @@ export default function RoomPage() {
       setWinner(offlineGame.winner)
       setDay(offlineGame.day)
       setPhase(offlineGame.phase)
+      setTimeLeft(offlineGame.timeLeft)
     }
   }, [router, isOfflineMode, offlineGame])
 
-  // 소켓 연결 및 방 참가 로직
-  useEffect(() => {
-    if (!isInitialized || isOfflineMode || !socket || !isConnected || !nickname) return
+  // 플레이어 목록 업데이트 핸들러
+  const handlePlayersUpdate = useCallback((updatedPlayers: Player[]) => {
+    console.log("Received players update:", updatedPlayers)
+    setPlayers(updatedPlayers)
+  }, [])
 
-    // 방에 아직 참가하지 않았다면 참가 요청
-    if (!hasJoined) {
-      console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
-
-      // 호스트인 경우 로컬에서 플레이어 목록 초기화
-      if (isHost) {
-        const hostPlayer: Player = {
-          id: "local-id", // 소켓 연결 전이므로 임시 ID 사용
-          nickname: nickname,
-          isHost: true,
-          role: null,
-          isAlive: true,
-          vote: null,
-        }
-        setPlayers([hostPlayer]) // 호스트를 플레이어 목록에 즉시 추가
-      }
-
-      // 서버에 참가 요청
-      socket.emit("joinRoom", { roomId, nickname, isHost })
-      setHasJoined(true)
-    }
-
-    // 플레이어 목록 업데이트 이벤트 리스너
-    const handlePlayersUpdate = (updatedPlayers: Player[]) => {
-      console.log("Received players update:", updatedPlayers)
-      setPlayers(updatedPlayers)
-    }
-
-    // 게임 상태 업데이트 이벤트 리스너
-    const handleGameStateUpdate = (data: {
+  // 게임 상태 업데이트 핸들러
+  const handleGameStateUpdate = useCallback(
+    (data: {
       state: GameState
       role?: "mafia" | "citizen"
       day?: number
       phase?: "day" | "night"
       winner?: "mafia" | "citizen"
     }) => {
+      console.log("Received game state update:", data)
       setGameState(data.state)
 
       if (data.role) {
@@ -130,18 +110,76 @@ export default function RoomPage() {
       if (data.winner) {
         setWinner(data.winner)
       }
+    },
+    [],
+  )
+
+  // 페이즈 변경 핸들러
+  const handlePhaseChange = useCallback((data: { phase: "day" | "night"; day: number; timeLeft: number }) => {
+    console.log("Received phase change:", data)
+    setPhase(data.phase)
+    setDay(data.day)
+    setTimeLeft(data.timeLeft)
+  }, [])
+
+  // 시간 업데이트 핸들러
+  const handleTimeUpdate = useCallback((time: number) => {
+    console.log("Received time update:", time)
+    setTimeLeft(time)
+  }, [])
+
+  // 소켓 연결 및 방 참가 로직
+  useEffect(() => {
+    if (!isInitialized || isOfflineMode || !socket || !isConnected || !nickname) return
+
+    // 방에 아직 참가하지 않았다면 참가 요청
+    if (!hasJoined) {
+      console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
+      socket.emit("joinRoom", { roomId, nickname, isHost })
+      setHasJoined(true)
     }
+
+    return () => {
+      // 이 useEffect에서는 이벤트 리스너를 등록하지 않으므로 정리 함수는 비어있음
+    }
+  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined, isInitialized])
+
+  // 이벤트 리스너 설정 (한 번만 실행)
+  useEffect(() => {
+    if (isOfflineMode || !socket || !isConnected || eventListenersSetupRef.current) return
+
+    console.log("Setting up event listeners")
 
     // 이벤트 리스너 등록
     socket.on("playersUpdate", handlePlayersUpdate)
     socket.on("gameStateUpdate", handleGameStateUpdate)
+    socket.on("phaseChange", handlePhaseChange)
+    socket.on("timeUpdate", handleTimeUpdate)
+    socket.on("systemMessage", (message: string) => {
+      console.log("System message:", message)
+    })
+
+    eventListenersSetupRef.current = true
 
     // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
+      console.log("Cleaning up event listeners")
       socket.off("playersUpdate", handlePlayersUpdate)
       socket.off("gameStateUpdate", handleGameStateUpdate)
+      socket.off("phaseChange", handlePhaseChange)
+      socket.off("timeUpdate", handleTimeUpdate)
+      socket.off("systemMessage")
+      eventListenersSetupRef.current = false
     }
-  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined, isInitialized])
+  }, [
+    socket,
+    isConnected,
+    isOfflineMode,
+    handlePlayersUpdate,
+    handleGameStateUpdate,
+    handlePhaseChange,
+    handleTimeUpdate,
+  ])
 
   // Handle disconnection
   useEffect(() => {
@@ -235,6 +273,7 @@ export default function RoomPage() {
           nickname={nickname}
           isOfflineMode={isOfflineMode}
           offlineGame={isOfflineMode ? offlineGame : undefined}
+          timeLeft={isOfflineMode ? offlineGame.timeLeft : timeLeft}
         />
       </>
     )

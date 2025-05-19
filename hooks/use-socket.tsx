@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { io, type Socket } from "socket.io-client"
 import { CLIENT_CONFIG } from "@/environment-variables"
 
@@ -8,6 +8,7 @@ export function useSocket(roomId: string) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const socketRef = useRef<Socket | null>(null)
 
   // Check if we're in offline mode
   const isOfflineMode =
@@ -32,9 +33,17 @@ export function useSocket(roomId: string) {
 
     console.log(`[Socket.IO] 연결 시도: ${socketUrl}`)
 
+    // 이미 소켓이 존재하고 연결되어 있으면 재사용
+    if (socketRef.current && socketRef.current.connected) {
+      console.log("[Socket.IO] 기존 연결 재사용:", socketRef.current.id)
+      setSocket(socketRef.current)
+      setIsConnected(true)
+      return () => {}
+    }
+
     // Create socket connection with explicit options
     const socketInstance = io(socketUrl, {
-      transports: ["polling"], // 먼저 polling만 사용
+      transports: ["websocket", "polling"], // WebSocket 우선 시도, 실패 시 polling으로 전환
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 20000,
@@ -60,12 +69,14 @@ export function useSocket(roomId: string) {
     })
 
     // Save socket instance
+    socketRef.current = socketInstance
     setSocket(socketInstance)
 
     // Clean up on unmount
     return () => {
       console.log("[Socket.IO] 연결 정리 중")
       socketInstance.disconnect()
+      socketRef.current = null
     }
   }, [roomId, isOfflineMode])
 

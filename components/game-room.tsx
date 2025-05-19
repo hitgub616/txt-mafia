@@ -22,6 +22,7 @@ interface GameRoomProps {
   nickname: string
   isOfflineMode?: boolean
   offlineGame?: any
+  timeLeft?: number
 }
 
 export function GameRoom({
@@ -34,17 +35,16 @@ export function GameRoom({
   nickname,
   isOfflineMode = false,
   offlineGame,
+  timeLeft = 0,
 }: GameRoomProps) {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [timeLeft, setTimeLeft] = useState(120)
   const [votedFor, setVotedFor] = useState<string | null>(null)
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
   const [mafiaTarget, setMafiaTarget] = useState<string | null>(null)
   const [systemMessages, setSystemMessages] = useState<string[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const [setPhase, setPhaseState] = useState<"day" | "night">(phase)
-  const [setDay, setDayState] = useState<number>(day)
+  const [localTimeLeft, setLocalTimeLeft] = useState<number>(timeLeft)
 
   const currentPlayer = players.find((p) => p.nickname === nickname)
   const isAlive = currentPlayer?.isAlive ?? true
@@ -60,21 +60,25 @@ export function GameRoom({
   const mafiaPlayers = isMafia ? players.filter((p) => p.role === "mafia" && p.isAlive) : []
 
   useEffect(() => {
+    // 서버에서 받은 timeLeft 값으로 localTimeLeft 업데이트
+    setLocalTimeLeft(timeLeft)
+  }, [timeLeft])
+
+  useEffect(() => {
     if (isOfflineMode && offlineGame) {
       // Use offline game state
       setMessages(offlineGame.messages)
       setVoteCounts(offlineGame.voteCounts)
-      setTimeLeft(offlineGame.timeLeft)
       setSystemMessages(offlineGame.systemMessages)
       return
     }
 
     if (socket) {
-      socket.on("chatMessage", (message: ChatMessage) => {
+      const handleChatMessage = (message: ChatMessage) => {
         setMessages((prev) => [...prev, message])
-      })
+      }
 
-      socket.on("systemMessage", (message: string) => {
+      const handleSystemMessage = (message: string) => {
         setSystemMessages((prev) => [...prev, message])
         setMessages((prev) => [
           ...prev,
@@ -85,35 +89,33 @@ export function GameRoom({
             isSystem: true,
           },
         ])
-      })
+      }
 
-      socket.on("voteUpdate", (votes: Record<string, number>) => {
+      const handleVoteUpdate = (votes: Record<string, number>) => {
         setVoteCounts(votes)
-      })
+      }
 
-      socket.on(
-        "phaseChange",
-        ({ phase, day, timeLeft }: { phase: "day" | "night"; day: number; timeLeft: number }) => {
-          setPhaseState(phase)
-          setDayState(day)
-          setTimeLeft(timeLeft)
-          setVotedFor(null)
-          setMafiaTarget(null)
-        },
-      )
+      const handlePhaseChange = ({
+        phase,
+        day,
+        timeLeft,
+      }: { phase: "day" | "night"; day: number; timeLeft: number }) => {
+        setVotedFor(null)
+        setMafiaTarget(null)
+      }
 
-      socket.on("timeUpdate", (timeLeft: number) => {
-        setTimeLeft(timeLeft)
-      })
-    }
+      // 이벤트 리스너 등록
+      socket.on("chatMessage", handleChatMessage)
+      socket.on("systemMessage", handleSystemMessage)
+      socket.on("voteUpdate", handleVoteUpdate)
+      socket.on("phaseChange", handlePhaseChange)
 
-    return () => {
-      if (socket) {
-        socket.off("chatMessage")
-        socket.off("systemMessage")
-        socket.off("voteUpdate")
-        socket.off("phaseChange")
-        socket.off("timeUpdate")
+      return () => {
+        // 이벤트 리스너 제거
+        socket.off("chatMessage", handleChatMessage)
+        socket.off("systemMessage", handleSystemMessage)
+        socket.off("voteUpdate", handleVoteUpdate)
+        socket.off("phaseChange", handlePhaseChange)
       }
     }
   }, [socket, isOfflineMode, offlineGame])
@@ -122,6 +124,17 @@ export function GameRoom({
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  // 타이머 표시용 로컬 카운트다운
+  useEffect(() => {
+    if (localTimeLeft <= 0) return
+
+    const timer = setInterval(() => {
+      setLocalTimeLeft((prev) => Math.max(0, prev - 1))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [localTimeLeft])
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault()
@@ -192,7 +205,7 @@ export function GameRoom({
                 </div>
                 <div className="text-sm">
                   <span className="font-mono">
-                    {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                    {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
                   </span>
                 </div>
               </div>

@@ -33,7 +33,7 @@ export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = f
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const canStartGame = players.length >= 4 && players.length <= 9 && isHost
+  const canStartGame = players.length >= 2 && players.length <= 9 && isHost
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
@@ -66,8 +66,8 @@ export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = f
             </div>
 
             <div className="text-sm text-muted-foreground">
-              <p>게임 시작 조건: 4~9명의 플레이어</p>
-              {players.length < 4 && <p className="text-yellow-500 mt-1">최소 4명의 플레이어가 필요합니다.</p>}
+              <p>게임 시작 조건: 2~9명의 플레이어</p>
+              {players.length < 2 && <p className="text-yellow-500 mt-1">최소 2명의 플레이어가 필요합니다.</p>}
             </div>
           </div>
         </CardContent>
