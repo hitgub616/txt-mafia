@@ -63,8 +63,21 @@ export function useSocket(roomId: string) {
     socketInstance.on("connect", () => {
       console.log("[Socket.IO] 연결 성공:", socketInstance.id)
       console.log("[Socket.IO] 전송 방식:", socketInstance.io.engine.transport.name)
+
+      // 연결 성공 시 추가 정보 로깅
+      console.log("[Socket.IO] 연결 상태:", {
+        connected: socketInstance.connected,
+        id: socketInstance.id,
+        rooms: socketInstance.rooms,
+      })
+
       setIsConnected(true)
       setError(null)
+    })
+
+    // 모든 이벤트 로깅 추가 (connect 이벤트 리스너 아래에 추가)
+    socketInstance.onAny((event, ...args) => {
+      console.log(`[Socket.IO] 이벤트 수신: ${event}`, args)
     })
 
     socketInstance.on("connect_error", (err) => {

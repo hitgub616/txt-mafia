@@ -365,8 +365,12 @@ io.on("connection", (socket) => {
       })),
     )
 
+    // 디버깅을 위한 추가 로깅
+    console.log(`Emitted playersUpdate event to room ${roomId} with ${room.players.length} players`)
+
     // Send game state to new player
     socket.emit("gameStateUpdate", { state: room.state })
+    console.log(`Emitted gameStateUpdate event to player ${nickname} with state: ${room.state}`)
   })
 
   // Start game

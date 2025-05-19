@@ -76,13 +76,14 @@ export default function RoomPage() {
     if (isOfflineMode || !socket || !isConnected || !nickname || hasJoined) return
 
     // Join the room
-    console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`)
+    console.log(`Joining room ${roomId} as ${nickname}, isHost: ${isHost}`) // 디버깅 로그 추가
     socket.emit("joinRoom", { roomId, nickname, isHost })
     setHasJoined(true)
 
     // Listen for player updates
     socket.on("playersUpdate", (updatedPlayers: Player[]) => {
-      console.log("Received players update:", updatedPlayers)
+      console.log("Received players update:", updatedPlayers) // 디버깅 로그 추가
+      console.log("Current players state:", players) // 현재 상태 확인
       setPlayers(updatedPlayers)
     })
 
@@ -96,6 +97,7 @@ export default function RoomPage() {
         phase?: "day" | "night"
         winner?: "mafia" | "citizen"
       }) => {
+        console.log("Received game state update:", data) // 디버깅 로그 추가
         setGameState(data.state)
 
         if (data.role) {
@@ -120,7 +122,13 @@ export default function RoomPage() {
       socket.off("playersUpdate")
       socket.off("gameStateUpdate")
     }
-  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined])
+  }, [socket, isConnected, roomId, nickname, isHost, isOfflineMode, hasJoined, players])
+
+  // players 상태가 변경될 때마다 로그 출력하는 useEffect 추가
+  // 기존 useEffect 아래에 추가
+  useEffect(() => {
+    console.log("Players state updated:", players)
+  }, [players])
 
   // Handle disconnection
   useEffect(() => {
