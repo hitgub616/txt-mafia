@@ -12,6 +12,7 @@ import type { Player, GameState } from "@/types/game"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react"
 import { FallbackNotice } from "@/components/fallback-notice"
+import { useTheme } from "next-themes"
 
 export default function RoomPage() {
   const params = useParams()
@@ -32,6 +33,8 @@ export default function RoomPage() {
   const [timeLeft, setTimeLeft] = useState(0)
 
   const eventListenersSetupRef = useRef(false)
+
+  const { setTheme } = useTheme()
 
   // Check if we're in offline mode
   useEffect(() => {
@@ -200,6 +203,33 @@ export default function RoomPage() {
       }
     }
   }, [socket, roomId, nickname, isOfflineMode])
+
+  // 게임 페이즈 또는 게임 상태에 따른 테마 변경
+  useEffect(() => {
+    if (isOfflineMode) {
+      // 오프라인 모드에서는 offlineGame의 phase를 따름
+      if (offlineGame.phase === "night") {
+        setTheme("dark")
+      } else {
+        setTheme("light")
+      }
+      if (offlineGame.gameState === "gameOver" || offlineGame.gameState === "waiting") {
+        setTheme("light")
+      }
+      return
+    }
+
+    // 온라인 모드
+    if (gameState === "playing") {
+      if (phase === "night") {
+        setTheme("dark")
+      } else {
+        setTheme("light")
+      }
+    } else if (gameState === "gameOver" || gameState === "waiting") {
+      setTheme("light")
+    }
+  }, [gameState, phase, isOfflineMode, offlineGame?.phase, offlineGame?.gameState, setTheme])
 
   const handleRefresh = () => {
     window.location.reload()
