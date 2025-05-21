@@ -30,11 +30,11 @@ export default function OfflinePage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
       <div className="max-w-md w-full mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">오프라인 모드</h1>
-          <p className="text-gray-400">서버 연결 없이 로컬에서 게임을 플레이합니다</p>
+          <h1 className="text-4xl font-bold mb-2">오프라인 모드</h1>
+          <p className="text-muted-foreground">서버 연결 없이 로컬에서 게임을 플레이합니다</p>
         </div>
 
         <Card className="w-full">

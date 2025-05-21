@@ -88,11 +88,11 @@ export default function DebugPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
       <div className="max-w-2xl w-full mx-auto space-y-6">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">환경 변수 및 연결 디버깅</h1>
-          <p className="text-gray-400">현재 설정된 환경 변수와 Socket.IO 연결 상태를 확인합니다</p>
+          <h1 className="text-2xl font-bold mb-2">환경 변수 및 연결 디버깅</h1>
+          <p className="text-muted-foreground">현재 설정된 환경 변수와 Socket.IO 연결 상태를 확인합니다</p>
         </div>
 
         <Card>
