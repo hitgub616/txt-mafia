@@ -36,7 +36,7 @@ export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = f
   const canStartGame = players.length >= 2 && players.length <= 9 && isHost
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="flex justify-between items-center">

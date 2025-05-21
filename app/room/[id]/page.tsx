@@ -242,7 +242,7 @@ export default function RoomPage() {
   // Show loading state for online mode
   if (!isOfflineMode && !isConnected) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
         <div className="text-center space-y-4 max-w-md w-full">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-xl">서버에 연결 중...</p>

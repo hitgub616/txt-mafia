@@ -55,6 +55,22 @@
   }
   body {
     @apply bg-background text-foreground;
-    transition: background-color 0.5s ease-in-out, color 0.5s ease-in-out;
+    transition: background-color 3s ease-in-out, color 3s ease-in-out;
   }
+}
+
+/* 테마에 따른 배경 클래스 */
+@layer components {
+  .theme-background {
+    @apply bg-gradient-to-b from-blue-50 to-white transition-all duration-3000 ease-in-out;
+  }
+
+  .dark .theme-background {
+    @apply bg-gradient-to-b from-gray-900 to-black transition-all duration-3000 ease-in-out;
+  }
+}
+
+/* 전환 시간 커스텀 클래스 */
+.duration-3000 {
+  transition-duration: 3000ms;
 }

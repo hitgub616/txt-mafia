@@ -186,7 +186,7 @@ export function GameRoom({
   }
 
   return (
-    <div className="flex min-h-screen flex-col p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col p-4 theme-background">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
         {/* Game info and player list */}
         <div className="md:col-span-1 space-y-4">

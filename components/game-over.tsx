@@ -45,7 +45,7 @@ export function GameOver({
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-center">게임 종료</CardTitle>
