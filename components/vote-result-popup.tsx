@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Check, X, Clock } from "lucide-react"
+import { Check, X, Clock, AlertCircle } from "lucide-react"
 import type { VoteResult } from "@/types/game"
 
 interface VoteResultPopupProps {
@@ -15,6 +15,7 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
   const [isExiting, setIsExiting] = useState(false)
   const [showVotes, setShowVotes] = useState(false)
   const [showRole, setShowRole] = useState(false)
+  const [showInnocentMessage, setShowInnocentMessage] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 10 // 최대 시간 10초로 변경
 
@@ -51,11 +52,19 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
       setShowRole(true)
     }, 1000)
 
+    // 2초 후 무고한 시민 메시지 표시 (처형된 시민인 경우)
+    const innocentTimer = setTimeout(() => {
+      if (result.executed && result.role === "citizen") {
+        setShowInnocentMessage(true)
+      }
+    }, 2000)
+
     return () => {
       clearTimeout(votesTimer)
       clearTimeout(roleTimer)
+      clearTimeout(innocentTimer)
     }
-  }, [])
+  }, [result])
 
   // 모달 닫기 (애니메이션 포함)
   const handleClose = () => {
@@ -71,6 +80,27 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
 
   // 타이머 임계값 확인 (5초 이하)
   const isTimerCritical = timeLeft <= 5 && timeLeft > 0
+
+  // 무고한 시민 메시지 (처형된 시민인 경우)
+  const renderInnocentCitizenMessage = () => {
+    if (!showInnocentMessage || !result.executed || result.role !== "citizen") return null
+
+    return (
+      <div className="mt-6 p-4 bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-lg animate-fade-in">
+        <div className="flex items-center justify-center mb-2">
+          <AlertCircle className="h-6 w-6 text-blue-500 mr-2" />
+          <span className="text-xl font-bold text-blue-600 dark:text-blue-300">무고한 희생</span>
+        </div>
+        <p className="text-2xl font-bold text-center text-blue-700 dark:text-blue-200 mb-2">
+          결백한 시민이 희생되었습니다!
+        </p>
+        <div className="flex justify-center space-x-2 text-xl">
+          <span>😢</span>
+          <span>💔</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -115,7 +145,9 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
                       <p className="text-sm">
                         역할:{" "}
                         <span
-                          className={`${result.role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"} ${result.role === "mafia" ? "shake" : ""}`}
+                          className={`${
+                            result.role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"
+                          } ${result.role === "mafia" ? "shake" : ""}`}
                         >
                           {result.role === "mafia" ? "마피아" : "시민"}
                         </span>
@@ -131,6 +163,9 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
                   </div>
                 )}
               </div>
+
+              {/* 무고한 시민 메시지 (처형된 시민인 경우) */}
+              {renderInnocentCitizenMessage()}
 
               {/* 투표 현황 */}
               {showVotes && (

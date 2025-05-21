@@ -7,7 +7,7 @@ import { WaitingRoom } from "@/components/waiting-room"
 import { RoleReveal } from "@/components/role-reveal"
 import { GameOver } from "@/components/game-over"
 import { useSocket } from "@/hooks/use-socket"
-import type { Player, GameState, DaySubPhase, VoteResult } from "@/types/game"
+import type { Player, GameState, DaySubPhase, VoteResult, NominationResult } from "@/types/game"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -30,6 +30,7 @@ export default function RoomPage() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [nominatedPlayer, setNominatedPlayer] = useState<string | null>(null)
   const [voteResult, setVoteResult] = useState<VoteResult | null>(null)
+  const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
 
   const eventListenersSetupRef = useRef(false)
 
@@ -105,6 +106,8 @@ export default function RoomPage() {
       timeLeft: number
       nominatedPlayer?: string | null
       voteResult?: VoteResult | null
+      transitionType?: "dayStart" | "nightStart"
+      message?: string
     }) => {
       console.log("Received phase change:", data)
       setPhase(data.phase)
@@ -130,13 +133,10 @@ export default function RoomPage() {
   }, [])
 
   // 지목 결과 핸들러
-  const handleNominationResult = useCallback(
-    (data: { nominated: string | null; votes: Record<string, number>; reason?: string }) => {
-      console.log("Received nomination result:", data)
-      setNominatedPlayer(data.nominated)
-    },
-    [],
-  )
+  const handleNominationResult = useCallback((data: NominationResult) => {
+    console.log("Received nomination result:", data)
+    setNominationResult(data)
+  }, [])
 
   // 처형 결과 핸들러
   const handleExecutionResult = useCallback((result: VoteResult) => {
@@ -171,7 +171,7 @@ export default function RoomPage() {
     socket.on("gameStateUpdate", handleGameStateUpdate)
     socket.on("phaseChange", handlePhaseChange)
     socket.on("timeUpdate", handleTimeUpdate)
-    socket.on("nominationResult", handleNominationResult)
+    socket.on("nominationVoteResult", handleNominationResult)
     socket.on("executionResult", handleExecutionResult)
     socket.on("systemMessage", (message: string) => {
       console.log("System message:", message)
@@ -186,7 +186,7 @@ export default function RoomPage() {
       socket.off("gameStateUpdate", handleGameStateUpdate)
       socket.off("phaseChange", handlePhaseChange)
       socket.off("timeUpdate", handleTimeUpdate)
-      socket.off("nominationResult", handleNominationResult)
+      socket.off("nominationVoteResult", handleNominationResult)
       socket.off("executionResult", handleExecutionResult)
       socket.off("systemMessage")
       eventListenersSetupRef.current = false

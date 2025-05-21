@@ -24,4 +24,14 @@ export interface VoteResult {
     vote: "yes" | "no"
   }[]
   role?: "mafia" | "citizen" // 처형된 경우에만 포함
+  isInnocent?: boolean // 무고한 시민 여부 (처형된 시민인 경우)
+}
+
+// 의심 지목 결과 인터페이스 추가
+export interface NominationResult {
+  nominated: string | null
+  votes: Record<string, number>
+  voteDetails?: { voter: string; target: string }[]
+  tie: boolean
+  reason: string
 }

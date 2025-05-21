@@ -179,6 +179,58 @@
   }
 }
 
+/* 페이즈 전환 애니메이션 */
+@keyframes day-transition {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+    box-shadow: 0 0 0 rgba(255, 204, 0, 0);
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+    box-shadow: 0 0 30px rgba(255, 204, 0, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(255, 204, 0, 0.3);
+  }
+}
+
+@keyframes night-transition {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+    box-shadow: 0 0 0 rgba(0, 102, 255, 0);
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+    box-shadow: 0 0 30px rgba(0, 102, 255, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(0, 102, 255, 0.3);
+  }
+}
+
+@keyframes pulse-slow {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
 /* 투표 애니메이션 관련 클래스 */
 .modal-enter {
   animation: modal-in 0.3s ease-out forwards;
@@ -285,4 +337,33 @@
 
 .phase-change-animation {
   animation: phase-change 1s ease-in-out;
+}
+
+/* 페이즈 전환 모달 애니메이션 */
+.day-transition {
+  animation: day-transition 0.8s ease-out forwards;
+}
+
+.night-transition {
+  animation: night-transition 0.8s ease-out forwards;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s infinite ease-in-out;
+}
+
+/* 무고한 시민 메시지 애니메이션 */
+@keyframes fade-in-scale {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in-scale 0.5s ease-out forwards;
 }

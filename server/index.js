@@ -185,12 +185,14 @@ function startDayPhase(roomId, day) {
     player.executionVote = null
   })
 
-  // 페이즈 변경 이벤트 전송
+  // 페이즈 변경 이벤트 전송 (강화된 정보 포함)
   io.to(roomId).emit("phaseChange", {
     phase: "day",
     subPhase: "discussion",
     day: room.day,
     timeLeft: 15, // 15초로 설정
+    transitionType: "dayStart", // 페이즈 전환 타입 추가
+    message: `${room.day}일차 낮이 시작되었습니다. 자유롭게 토론하세요.`,
   })
 
   // 시스템 메시지 전송
@@ -315,7 +317,7 @@ function handleAiNominationVote(roomId) {
   })
 }
 
-// 지목 결과 처리 함수
+// 지목 결과 처리 함수 수정
 function processNominationResult(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -347,24 +349,44 @@ function processNominationResult(roomId) {
     }
   })
 
+  // 투표 상세 결과 생성 (누가 누구를 지목했는지)
+  const voteDetails = room.players
+    .filter((p) => p.isAlive && p.nominationVote)
+    .map((p) => ({
+      voter: p.nickname,
+      target: p.nominationVote,
+    }))
+
   // 지목 결과 처리
   if (nominated && !tie) {
     room.nominatedPlayer = nominated
-    io.to(roomId).emit("nominationResult", {
+
+    // 새로운 이벤트: 지목 결과 상세 정보 전송
+    io.to(roomId).emit("nominationVoteResult", {
       nominated,
       votes,
+      voteDetails,
+      tie: false,
+      reason: "최다 득표",
     })
+
     io.to(roomId).emit("systemMessage", `${nominated}님이 최다 득표로 지목되었습니다. 최후 변론을 시작합니다.`)
 
     // 최후 변론 단계로 전환
     startDefensePhase(roomId)
   } else {
     // 동점이거나 투표가 없는 경우
-    io.to(roomId).emit("nominationResult", {
+    const reason = tie ? "동점으로 지목 무효" : "투표가 없어 지목 무효"
+
+    // 새로운 이벤트: 지목 결과 상세 정보 전송 (지목 무효 케이스)
+    io.to(roomId).emit("nominationVoteResult", {
       nominated: null,
       votes,
-      reason: tie ? "동점으로 지목 무효" : "투표가 없어 지목 무효",
+      voteDetails,
+      tie: tie,
+      reason: reason,
     })
+
     io.to(roomId).emit(
       "systemMessage",
       tie ? "동점으로 지목이 무효되었습니다. 밤이 찾아옵니다." : "투표가 없어 지목이 무효되었습니다. 밤이 찾아옵니다.",
@@ -498,7 +520,7 @@ function handleAiExecutionVote(roomId) {
   })
 }
 
-// 처형 결과 처리 함수
+// 처형 결과 처리 함수 수정
 function processExecutionResult(roomId) {
   const room = rooms.get(roomId)
   if (!room || !room.nominatedPlayer) return
@@ -536,6 +558,7 @@ function processExecutionResult(roomId) {
   if (executed && targetPlayer) {
     targetPlayer.isAlive = false
     voteResult.role = targetPlayer.role
+    voteResult.isInnocent = targetPlayer.role === "citizen" // 무고한 시민 여부 추가
 
     // 시스템 메시지 전송
     io.to(roomId).emit(
@@ -555,7 +578,7 @@ function processExecutionResult(roomId) {
     phase: "day",
     subPhase: "result",
     day: room.day,
-    timeLeft: 10, // 10초로 설정 (이전 5초에서 변경)
+    timeLeft: 10, // 10초로 설정
     voteResult,
   })
 
@@ -575,7 +598,7 @@ function processExecutionResult(roomId) {
   })
 }
 
-// 밤 페이즈 시작 함수
+// 밤 페이즈 시작 함수 수정 (페이즈 전환 이벤트 강화)
 function startNightPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -584,12 +607,14 @@ function startNightPhase(roomId) {
   room.subPhase = null
   room.mafiaTarget = null
 
-  // 페이즈 변경 이벤트 전송
+  // 페이즈 변경 이벤트 전송 (강화된 정보 포함)
   io.to(roomId).emit("phaseChange", {
     phase: "night",
     subPhase: null,
     day: room.day,
     timeLeft: 15, // 15초로 설정
+    transitionType: "nightStart", // 페이즈 전환 타입 추가
+    message: "밤이 깊었습니다. 마피아는 서로를 확인하고 활동을 개시하세요. 시민은 조용히 밤이 지나가기를 기다립니다.",
   })
 
   // 시스템 메시지 전송

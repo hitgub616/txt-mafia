@@ -4,17 +4,19 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import type { Socket } from "socket.io-client"
-import type { Player, VoteResult, DaySubPhase } from "@/types/game"
+import type { Player, VoteResult, DaySubPhase, NominationResult } from "@/types/game"
 import type { ChatMessage } from "@/types/chat"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost } from "lucide-react"
+import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost, Skull } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { NominationVoteModal } from "./nomination-vote-modal"
 import { ExecutionVoteModal } from "./execution-vote-modal"
 import { VoteResultPopup } from "./vote-result-popup"
+import { NominationResultModal } from "./nomination-result-modal"
+import { PhaseTransitionModal } from "./phase-transition-modal"
 import { toast } from "sonner"
 
 interface GameRoomProps {
@@ -62,7 +64,14 @@ export function GameRoom({
   const [showNominationModal, setShowNominationModal] = useState(false)
   const [showExecutionModal, setShowExecutionModal] = useState(false)
   const [showVoteResultPopup, setShowVoteResultPopup] = useState(false)
+  const [showNominationResultModal, setShowNominationResultModal] = useState(false)
+  const [showPhaseTransitionModal, setShowPhaseTransitionModal] = useState(false)
   const [localVoteResult, setLocalVoteResult] = useState<VoteResult | null>(null)
+  const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
+  const [phaseTransitionInfo, setPhaseTransitionInfo] = useState<{
+    type: "dayStart" | "nightStart"
+    message: string
+  } | null>(null)
 
   // 페이즈 변경 애니메이션을 위한 상태 추가
   const [phaseChangeAnimation, setPhaseChangeAnimation] = useState(false)
@@ -110,6 +119,8 @@ export function GameRoom({
       timeLeft: number
       nominatedPlayer?: string | null
       voteResult?: VoteResult | null
+      transitionType?: "dayStart" | "nightStart"
+      message?: string
     }) => {
       console.log("Received phase change:", data)
 
@@ -123,6 +134,15 @@ export function GameRoom({
         setTimeout(() => {
           setPhaseChangeAnimation(false)
         }, 1000)
+      }
+
+      // 페이즈 전환 모달 표시 (낮/밤 전환 시)
+      if (data.transitionType && data.message) {
+        setPhaseTransitionInfo({
+          type: data.transitionType,
+          message: data.message,
+        })
+        setShowPhaseTransitionModal(true)
       }
 
       setPhase(data.phase)
@@ -293,12 +313,19 @@ export function GameRoom({
         setExecutionVotes(votes)
       }
 
+      const handleNominationVoteResult = (result: NominationResult) => {
+        console.log("Received nomination vote result:", result)
+        setNominationResult(result)
+        setShowNominationResultModal(true)
+      }
+
       // 이벤트 리스너 등록
       socket.on("chatMessage", handleChatMessage)
       socket.on("systemMessage", handleSystemMessage)
       socket.on("nominationVoteUpdate", handleNominationVoteUpdate)
       socket.on("executionVoteUpdate", handleExecutionVoteUpdate)
       socket.on("phaseChange", handlePhaseChange)
+      socket.on("nominationVoteResult", handleNominationVoteResult)
 
       return () => {
         // 이벤트 리스너 제거
@@ -307,6 +334,7 @@ export function GameRoom({
         socket.off("nominationVoteUpdate", handleNominationVoteUpdate)
         socket.off("executionVoteUpdate", handleExecutionVoteUpdate)
         socket.off("phaseChange", handlePhaseChange)
+        socket.off("nominationVoteResult", handleNominationVoteResult)
       }
     }
   }, [socket, isOfflineMode, offlineGame, phaseState, subPhaseState, handlePhaseChange])
@@ -469,7 +497,7 @@ export function GameRoom({
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 p-4">
         <div className="bg-red-900/50 p-6 rounded-lg max-w-md text-center border border-red-500/30">
-          <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <Skull className="h-16 w-16 mx-auto mb-4 text-red-500" />
           <h2 className="text-2xl font-bold mb-2 text-white">당신은 사망했습니다</h2>
           <p className="text-gray-300 mb-4">더 이상 게임에 참여할 수 없지만, 게임이 끝날 때까지 관전할 수 있습니다.</p>
           <div className="text-sm text-gray-400">
@@ -565,7 +593,7 @@ export function GameRoom({
                     className={`flex items-center justify-between p-2 rounded-md ${
                       player.isAlive
                         ? "bg-secondary"
-                        : "bg-secondary/30 text-muted-foreground border border-gray-300/20"
+                        : "bg-secondary/30 text-muted-foreground border border-gray-300/20 grayscale opacity-70"
                     } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
                   >
                     <div className="flex items-center">
@@ -573,14 +601,19 @@ export function GameRoom({
                       {player.isAlive ? (
                         <UserIcon className="h-4 w-4 mr-2" />
                       ) : (
-                        <Ghost className="h-4 w-4 mr-2 text-gray-400" />
+                        <div className="flex items-center">
+                          <Ghost className="h-4 w-4 mr-2 text-gray-400" />
+                          <Skull className="h-4 w-4 mr-2 text-red-400" />
+                        </div>
                       )}
-                      <div className={`flex flex-col ${!player.isAlive ? "grayscale opacity-70" : ""}`}>
-                        <span className={player.isAlive ? "" : "line-through"}>
+                      <div className={`flex flex-col ${!player.isAlive ? "opacity-70" : ""}`}>
+                        <span className={player.isAlive ? "" : "line-through text-red-400"}>
                           {player.nickname}
                           {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
                         </span>
-                        {!player.isAlive && <span className="text-xs text-red-400 dark:text-red-500">사망</span>}
+                        {!player.isAlive && (
+                          <span className="text-xs text-red-400 dark:text-red-500 font-bold">사망</span>
+                        )}
                       </div>
                       {isMafia && player.role === "mafia" && (
                         <span className="ml-2 text-xs text-red-500">(마피아)</span>
@@ -719,6 +752,24 @@ export function GameRoom({
           result={localVoteResult}
           timeLeft={localTimeLeft}
           onClose={() => setShowVoteResultPopup(false)}
+        />
+      )}
+
+      {/* 의심 지목 결과 모달 */}
+      {showNominationResultModal && nominationResult && (
+        <NominationResultModal
+          result={nominationResult}
+          timeLeft={localTimeLeft}
+          onClose={() => setShowNominationResultModal(false)}
+        />
+      )}
+
+      {/* 페이즈 전환 모달 */}
+      {showPhaseTransitionModal && phaseTransitionInfo && (
+        <PhaseTransitionModal
+          type={phaseTransitionInfo.type}
+          message={phaseTransitionInfo.message}
+          onClose={() => setShowPhaseTransitionModal(false)}
         />
       )}
 
