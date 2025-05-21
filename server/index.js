@@ -139,14 +139,14 @@ function startDayPhase(roomId, day) {
   io.to(roomId).emit("phaseChange", {
     phase: "day",
     day: room.day,
-    timeLeft: 120, // 2분
+    timeLeft: 15, // 15초로 변경
   })
 
   // 시스템 메시지 전송
   io.to(roomId).emit("systemMessage", `${room.day}일차 낮이 시작되었습니다.`)
 
-  // 타이머 시작 (2분)
-  startTimer(roomId, 120, () => {
+  // 타이머 시작 (15초)
+  startTimer(roomId, 15, () => {
     // 시간이 다 되면 밤 페이즈로 전환
     endDayPhase(roomId)
   })
@@ -217,14 +217,14 @@ function startNightPhase(roomId) {
   io.to(roomId).emit("phaseChange", {
     phase: "night",
     day: room.day,
-    timeLeft: 60, // 1분
+    timeLeft: 15, // 15초로 변경
   })
 
   // 시스템 메시지 전송
   io.to(roomId).emit("systemMessage", `${room.day}일차 밤이 시작되었습니다.`)
 
-  // 타이머 시작 (1분)
-  startTimer(roomId, 60, () => {
+  // 타이머 시작 (15초)
+  startTimer(roomId, 15, () => {
     // 시간이 다 되면 다음 낮 페이즈로 전환
     endNightPhase(roomId)
   })

@@ -29,7 +29,7 @@ export default function RoomPage() {
   const [isOfflineMode, setIsOfflineMode] = useState(false)
   const [playerCount, setPlayerCount] = useState(4)
   const [hasJoined, setHasJoined] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(useState(false))
   const [timeLeft, setTimeLeft] = useState(0)
 
   const eventListenersSetupRef = useRef(false)
@@ -213,7 +213,11 @@ export default function RoomPage() {
       } else {
         setTheme("light")
       }
-      if (offlineGame.gameState === "gameOver" || offlineGame.gameState === "waiting") {
+      if (
+        offlineGame.gameState === "gameOver" ||
+        offlineGame.gameState === "waiting" ||
+        offlineGame.gameState === "roleReveal"
+      ) {
         setTheme("light")
       }
       return
@@ -226,7 +230,7 @@ export default function RoomPage() {
       } else {
         setTheme("light")
       }
-    } else if (gameState === "gameOver" || gameState === "waiting") {
+    } else if (gameState === "gameOver" || gameState === "waiting" || gameState === "roleReveal") {
       setTheme("light")
     }
   }, [gameState, phase, isOfflineMode, offlineGame?.phase, offlineGame?.gameState, setTheme])

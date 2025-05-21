@@ -107,11 +107,11 @@ export function LobbyForm() {
       <CardFooter className="flex flex-col space-y-3">
         <div className="w-full p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md flex items-start">
           <AlertCircle className="h-5 w-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-yellow-200">
+          <div className="text-sm text-gray-700 dark:text-yellow-200">
             <p className="font-medium">연결 문제가 있나요?</p>
             <p className="mt-1">
               서버 연결 상태를{" "}
-              <Link href="/test" className="text-blue-400 hover:underline">
+              <Link href="/test" className="text-blue-600 hover:underline dark:text-blue-400">
                 테스트
               </Link>
               해보세요.

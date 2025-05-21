@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { UserIcon, MoonIcon, SunIcon, SendIcon } from "lucide-react"
+import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface GameRoomProps {
   players: Player[]
@@ -37,6 +38,7 @@ export function GameRoom({
   offlineGame,
   timeLeft = 0,
 }: GameRoomProps) {
+  const router = useRouter()
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [votedFor, setVotedFor] = useState<string | null>(null)
@@ -185,6 +187,25 @@ export function GameRoom({
     }
   }
 
+  const handleLeaveRoom = () => {
+    if (isOfflineMode) {
+      // 오프라인 모드에서는 세션 스토리지 정리 후 홈으로 이동
+      sessionStorage.removeItem("nickname")
+      sessionStorage.removeItem("isHost")
+      sessionStorage.removeItem("offlineMode")
+      sessionStorage.removeItem("playerCount")
+      router.push("/")
+    } else if (socket) {
+      // 서버에 방 나가기 이벤트 전송
+      socket.emit("leaveRoom", { roomId, nickname })
+
+      // 세션 스토리지 정리 후 홈으로 이동
+      sessionStorage.removeItem("nickname")
+      sessionStorage.removeItem("isHost")
+      router.push("/")
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col p-4 theme-background">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
@@ -209,6 +230,24 @@ export function GameRoom({
                   </span>
                 </div>
               </div>
+
+              {/* 내 역할 표시 */}
+              <div className="mt-2 p-2 bg-secondary/50 rounded-md text-sm">
+                <span className="font-medium">내 역할: </span>
+                <span className={role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"}>
+                  {role === "mafia" ? "마피아" : "시민"}
+                </span>
+              </div>
+
+              {/* 방 나가기 버튼 */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-2 text-red-500 hover:bg-red-500/10"
+                onClick={handleLeaveRoom}
+              >
+                <LogOut className="h-4 w-4 mr-2" />방 나가기
+              </Button>
             </CardHeader>
             <CardContent>
               <h3 className="text-sm font-medium mb-2">
@@ -220,11 +259,12 @@ export function GameRoom({
                     key={player.id}
                     className={`flex items-center justify-between p-2 rounded-md ${
                       player.isAlive ? "bg-secondary" : "bg-secondary/30 text-muted-foreground line-through"
-                    }`}
+                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
                   >
                     <div className="flex items-center">
                       <UserIcon className="h-4 w-4 mr-2" />
                       <span>{player.nickname}</span>
+                      {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
                       {!player.isAlive && <span className="ml-2 text-xs">(사망)</span>}
                       {isMafia && player.role === "mafia" && (
                         <span className="ml-2 text-xs text-red-500">(마피아)</span>
