@@ -16,7 +16,7 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
   const [showVotes, setShowVotes] = useState(false)
   const [showRole, setShowRole] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
-  const maxTime = 5 // 최대 시간 (초)
+  const maxTime = 10 // 최대 시간 10초로 변경
 
   // 타이머가 끝나면 자동으로 닫기
   useEffect(() => {
@@ -94,14 +94,12 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
               <div className="text-center">
                 {result.executed ? (
                   <div className="space-y-2">
-                    <div className="text-4xl slide-in-top" style={{ animationDelay: "0.1s" }}>
-                      ⚰️
-                    </div>
-                    <p className="text-xl font-bold slide-in-top" style={{ animationDelay: "0.2s" }}>
+                    <div className="text-4xl">⚰️</div>
+                    <p className="text-xl font-bold">
                       <span className="text-red-500">{result.target}</span>님이 처형되었습니다.
                     </p>
                     {result.role && showRole && (
-                      <p className="text-sm slide-in-top" style={{ animationDelay: "0.3s" }}>
+                      <p className="text-sm">
                         역할:{" "}
                         <span
                           className={`${result.role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"} ${result.role === "mafia" ? "shake" : ""}`}
@@ -113,10 +111,8 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="text-4xl slide-in-top" style={{ animationDelay: "0.1s" }}>
-                      🛡️
-                    </div>
-                    <p className="text-xl font-bold slide-in-top" style={{ animationDelay: "0.2s" }}>
+                    <div className="text-4xl">🛡️</div>
+                    <p className="text-xl font-bold">
                       <span className="text-blue-500">{result.target}</span>님이 생존하였습니다.
                     </p>
                   </div>
@@ -125,7 +121,7 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
 
               {/* 투표 현황 */}
               {showVotes && (
-                <div className="slide-in-bottom" style={{ animationDelay: "0.4s" }}>
+                <div>
                   <h3 className="text-sm font-medium mb-3 text-center">
                     투표 현황 ({yesVotes}:{noVotes})
                   </h3>
@@ -138,11 +134,10 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
                       <div className="space-y-1 mt-1">
                         {result.votes
                           .filter((v) => v.vote === "yes")
-                          .map((vote, index) => (
+                          .map((vote) => (
                             <div
                               key={vote.nickname}
-                              className="flex items-center p-2 rounded-md bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/30 slide-in-bottom"
-                              style={{ animationDelay: `${0.5 + index * 0.05}s` }}
+                              className="flex items-center p-2 rounded-md bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/30"
                             >
                               <Check className="h-4 w-4 mr-2 text-green-500" />
                               <span className="text-sm">{vote.nickname}</span>
@@ -162,11 +157,10 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
                       <div className="space-y-1 mt-1">
                         {result.votes
                           .filter((v) => v.vote === "no")
-                          .map((vote, index) => (
+                          .map((vote) => (
                             <div
                               key={vote.nickname}
-                              className="flex items-center p-2 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 slide-in-bottom"
-                              style={{ animationDelay: `${0.5 + index * 0.05}s` }}
+                              className="flex items-center p-2 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30"
                             >
                               <X className="h-4 w-4 mr-2 text-red-500" />
                               <span className="text-sm">{vote.nickname}</span>
@@ -182,12 +176,7 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
               )}
 
               {/* 타이머 */}
-              <div
-                className="text-center text-sm text-muted-foreground slide-in-bottom"
-                style={{ animationDelay: "0.7s" }}
-              >
-                {timeLeft}초 후 자동으로 닫힙니다...
-              </div>
+              <div className="text-center text-sm text-muted-foreground">{timeLeft}초 후 자동으로 닫힙니다...</div>
             </div>
           </CardContent>
         </Card>

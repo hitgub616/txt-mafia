@@ -550,8 +550,8 @@ function processExecutionResult(roomId) {
     voteResult,
   })
 
-  // 타이머 시작 (5초)
-  startTimer(roomId, 5, () => {
+  // 타이머 시작 (5초)를 (10초)로 변경
+  startTimer(roomId, 10, () => {
     // 게임 종료 조건 확인
     if (executed) {
       const gameResult = checkGameEnd(room)

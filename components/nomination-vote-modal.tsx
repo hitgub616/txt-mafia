@@ -111,21 +111,20 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground mb-4 slide-in-bottom" style={{ animationDelay: "0.1s" }}>
+              <p className="text-sm text-muted-foreground mb-4">
                 가장 의심되는 플레이어를 선택하세요. 최다 득표자는 최후 변론 기회를 갖게 됩니다.
               </p>
 
               <div className="grid grid-cols-1 gap-2">
-                {votablePlayers.map((player, index) => (
+                {votablePlayers.map((player) => (
                   <Button
                     key={player.id}
                     variant={selectedPlayer === player.nickname ? "destructive" : "outline"}
                     className={`justify-start h-auto py-3 vote-highlight ${
                       selectedPlayer === player.nickname ? "vote-selected border-2 border-destructive" : ""
-                    } ${animateSelection === player.nickname ? "pulse-vote" : ""} slide-in-bottom`}
+                    } ${animateSelection === player.nickname ? "pulse-vote" : ""}`}
                     onClick={() => handlePlayerSelect(player.nickname)}
                     disabled={isVoted}
-                    style={{ animationDelay: `${0.1 + index * 0.05}s` }}
                   >
                     <div className="flex items-center">
                       <UserIcon className="h-4 w-4 mr-2" />
@@ -136,7 +135,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
               </div>
             </div>
           </CardContent>
-          <CardFooter className="flex justify-between slide-in-bottom" style={{ animationDelay: "0.3s" }}>
+          <CardFooter className="flex justify-between">
             <Button variant="ghost" onClick={handleClose} disabled={isVoted}>
               취소
             </Button>

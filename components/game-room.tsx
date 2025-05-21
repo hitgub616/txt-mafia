@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut } from "lucide-react"
+import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { NominationVoteModal } from "./nomination-vote-modal"
 import { ExecutionVoteModal } from "./execution-vote-modal"
@@ -136,13 +136,20 @@ export function GameRoom({
   // 서브페이즈 변경 감지 및 모달 표시
   useEffect(() => {
     if (phaseState === "day") {
-      if (subPhaseState === "nomination" && isAlive) {
+      // 사망자는 모달을 볼 수 없음
+      if (!isAlive) {
+        setShowNominationModal(false)
+        setShowExecutionModal(false)
+        return
+      }
+
+      if (subPhaseState === "nomination") {
         setShowNominationModal(true)
       } else {
         setShowNominationModal(false)
       }
 
-      if (subPhaseState === "execution" && isAlive) {
+      if (subPhaseState === "execution") {
         setShowExecutionModal(true)
       } else {
         setShowExecutionModal(false)
@@ -358,6 +365,24 @@ export function GameRoom({
     return ""
   }
 
+  // 사망자 메시지 표시
+  const renderDeadPlayerMessage = () => {
+    if (isAlive) return null
+
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 p-4">
+        <div className="bg-red-900/50 p-6 rounded-lg max-w-md text-center border border-red-500/30">
+          <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <h2 className="text-2xl font-bold mb-2 text-white">당신은 사망했습니다</h2>
+          <p className="text-gray-300 mb-4">더 이상 게임에 참여할 수 없지만, 게임이 끝날 때까지 관전할 수 있습니다.</p>
+          <div className="text-sm text-gray-400">
+            사망한 플레이어는 채팅, 투표 등 게임의 어떤 기능도 이용할 수 없습니다.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen flex-col p-4 theme-background">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
@@ -409,6 +434,7 @@ export function GameRoom({
                 <span className={role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"}>
                   {role === "mafia" ? "마피아" : "시민"}
                 </span>
+                {!isAlive && <span className="ml-2 text-red-500">(사망)</span>}
               </div>
 
               {/* 방 나가기 버튼 */}
@@ -427,13 +453,12 @@ export function GameRoom({
               </h3>
               {/* 플레이어 목록 렌더링 부분 수정 */}
               <div className="space-y-2">
-                {players.map((player, index) => (
+                {players.map((player) => (
                   <div
                     key={player.id}
                     className={`flex items-center justify-between p-2 rounded-md ${
                       player.isAlive ? "bg-secondary" : "bg-secondary/30 text-muted-foreground line-through"
-                    } ${player.nickname === nickname ? "border border-primary/50" : ""} slide-in-bottom`}
-                    style={{ animationDelay: `${0.05 * index}s` }}
+                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
                   >
                     <div className="flex items-center">
                       <UserIcon className="h-4 w-4 mr-2" />
@@ -445,8 +470,8 @@ export function GameRoom({
                       )}
                     </div>
 
-                    {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만) */}
-                    {phase === "night" && isMafia && player.isAlive && player.role !== "mafia" && (
+                    {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만, 살아있는 경우만) */}
+                    {phase === "night" && isMafia && isAlive && player.isAlive && player.role !== "mafia" && (
                       <Button
                         variant={mafiaTarget === player.nickname ? "destructive" : "outline"}
                         size="sm"
@@ -462,15 +487,11 @@ export function GameRoom({
 
               {/* Mafia list (only visible to mafia) */}
               {isMafia && mafiaPlayers.length > 0 && (
-                <div className="mt-4 slide-in-bottom" style={{ animationDelay: "0.3s" }}>
+                <div className="mt-4">
                   <h3 className="text-sm font-medium mb-2 text-red-500">마피아 팀</h3>
                   <div className="space-y-2">
-                    {mafiaPlayers.map((player, index) => (
-                      <div
-                        key={player.id}
-                        className="flex items-center p-2 rounded-md bg-red-900/30 slide-in-bottom"
-                        style={{ animationDelay: `${0.4 + index * 0.05}s` }}
-                      >
+                    {mafiaPlayers.map((player) => (
+                      <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30">
                         <UserIcon className="h-4 w-4 mr-2" />
                         <span>{player.nickname}</span>
                       </div>
@@ -508,23 +529,14 @@ export function GameRoom({
                             <div className="space-y-1">
                               <div className="text-xs text-muted-foreground mb-1">{group.sender}</div>
                               {group.messages.map((msg, msgIndex) => (
-                                <div
-                                  key={msgIndex}
-                                  className="bg-secondary p-3 rounded-lg mb-1 slide-in-bottom"
-                                  style={{ animationDelay: `${msgIndex * 0.05}s` }}
-                                >
+                                <div key={msgIndex} className="bg-secondary p-3 rounded-lg mb-1">
                                   {msg.content}
                                 </div>
                               ))}
                             </div>
                           </div>
                         ) : (
-                          <div
-                            className="bg-muted/50 px-4 py-2 rounded-full text-sm slide-in-top"
-                            style={{ animationDelay: "0.1s" }}
-                          >
-                            {group.messages[0].content}
-                          </div>
+                          <div className="bg-muted/50 px-4 py-2 rounded-full text-sm">{group.messages[0].content}</div>
                         )}
                       </div>
                     ))
@@ -573,6 +585,7 @@ export function GameRoom({
       {showExecutionModal && nominatedPlayerState && (
         <ExecutionVoteModal
           nominatedPlayer={nominatedPlayerState}
+          currentPlayerNickname={nickname} // 현재 플레이어 닉네임 전달
           timeLeft={localTimeLeft}
           onVote={handleExecutionVote}
           onClose={() => setShowExecutionModal(false)}
@@ -587,6 +600,9 @@ export function GameRoom({
           onClose={() => setShowVoteResultPopup(false)}
         />
       )}
+
+      {/* 사망자 메시지 */}
+      {!isAlive && renderDeadPlayerMessage()}
     </div>
   )
 }
