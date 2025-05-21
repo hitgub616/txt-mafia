@@ -206,36 +206,36 @@ function startDayPhase(roomId, day) {
   setTimeout(() => {
     handleAiDiscussion(roomId)
   }, 2000)
-}
 
-// AI 플레이어 토론 처리
-function handleAiDiscussion(roomId) {
-  const room = rooms.get(roomId)
-  if (!room || room.state !== "playing" || room.subPhase !== "discussion") return
+  // AI 플레이어 토론 처리
+  function handleAiDiscussion(roomId) {
+    const room = rooms.get(roomId)
+    if (!room || room.state !== "playing" || room.subPhase !== "discussion") return
 
-  // AI 플레이어 찾기
-  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
-  if (aiPlayers.length === 0) return
+    // AI 플레이어 찾기
+    const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
+    if (aiPlayers.length === 0) return
 
-  // 각 AI 플레이어에 대해 랜덤하게 채팅 메시지 전송
-  aiPlayers.forEach((ai) => {
-    if (Math.random() < 0.7) {
-      // 70% 확률로 메시지 전송
-      setTimeout(() => {
-        if (room.subPhase !== "discussion") return // 단계가 변경되었으면 중단
+    // 각 AI 플레이어에 대해 랜덤하게 채팅 메시지 전송
+    aiPlayers.forEach((ai) => {
+      if (Math.random() < 0.7) {
+        // 70% 확률로 메시지 전송
+        setTimeout(() => {
+          if (room.subPhase !== "discussion") return // 단계가 변경되었으면 중단
 
-        const messages = ai.role === "mafia" ? MAFIA_AI_CHAT_MESSAGES : AI_CHAT_MESSAGES
-        const randomMessage = messages[Math.floor(Math.random() * messages.length)]
+          const messages = ai.role === "mafia" ? MAFIA_AI_CHAT_MESSAGES : AI_CHAT_MESSAGES
+          const randomMessage = messages[Math.floor(Math.random() * messages.length)]
 
-        io.to(roomId).emit("chatMessage", {
-          sender: ai.nickname,
-          content: randomMessage,
-          timestamp: new Date().toISOString(),
-          isMafiaChat: false,
-        })
-      }, Math.random() * 10000) // 0~10초 사이 랜덤 시간 후 메시지 전송
-    }
-  })
+          io.to(roomId).emit("chatMessage", {
+            sender: ai.nickname,
+            content: randomMessage,
+            timestamp: new Date().toISOString(),
+            isMafiaChat: false,
+          })
+        }, Math.random() * 10000) // 0~10초 사이 랜덤 시간 후 메시지 전송
+      }
+    })
+  }
 }
 
 // 의심 지목 단계 시작 함수
@@ -273,7 +273,7 @@ function handleAiNominationVote(roomId) {
   const room = rooms.get(roomId)
   if (!room || room.state !== "playing" || room.subPhase !== "nomination") return
 
-  // AI 플레이어 찾기
+  // AI 플레이어 찾기 (살아있는 AI만)
   const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
   if (aiPlayers.length === 0) return
 
@@ -320,7 +320,7 @@ function processNominationResult(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
 
-  // 투표 집계
+  // 투표 집계 (살아있는 플레이어의 투표만 집계)
   const votes = {}
   room.players.forEach((p) => {
     if (p.isAlive && p.nominationVote) {
@@ -328,12 +328,16 @@ function processNominationResult(roomId) {
     }
   })
 
-  // 최다 득표자 찾기
+  // 최다 득표자 찾기 (살아있는 플레이어 중에서만)
   let maxVotes = 0
   let nominated = null
   let tie = false
 
   Object.entries(votes).forEach(([nickname, count]) => {
+    // 투표 대상이 살아있는지 확인
+    const targetPlayer = room.players.find((p) => p.nickname === nickname && p.isAlive)
+    if (!targetPlayer) return // 사망한 플레이어는 투표 대상에서 제외
+
     if (count > maxVotes) {
       maxVotes = count
       nominated = nickname
@@ -456,7 +460,7 @@ function handleAiExecutionVote(roomId) {
   const room = rooms.get(roomId)
   if (!room || room.state !== "playing" || room.subPhase !== "execution" || !room.nominatedPlayer) return
 
-  // AI 플레이어 찾기
+  // AI 플레이어 찾기 (살아있는 AI만)
   const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
   if (aiPlayers.length === 0) return
 
@@ -469,12 +473,13 @@ function handleAiExecutionVote(roomId) {
     // 이미 투표했으면 스킵
     if (ai.executionVote) return
 
-    // 자신이 지목된 경우 반대 투표
+    // 자신이 지목된 경우 투표 불가 (스킵)
     if (ai.nickname === room.nominatedPlayer) {
-      ai.executionVote = "no"
+      return
     }
+
     // 마피아 AI의 경우
-    else if (ai.role === "mafia") {
+    if (ai.role === "mafia") {
       // 지목된 플레이어가 마피아면 반대, 시민이면 찬성
       ai.executionVote = nominatedPlayer.role === "mafia" ? "no" : "yes"
     }
@@ -500,9 +505,13 @@ function processExecutionResult(roomId) {
 
   room.subPhase = "result" // 결과 표시 단계
 
-  // 투표 집계
-  const yesVotes = room.players.filter((p) => p.isAlive && p.executionVote === "yes").length
-  const noVotes = room.players.filter((p) => p.isAlive && p.executionVote === "no").length
+  // 투표 집계 (살아있는 플레이어의 투표만 집계, 지목된 플레이어 제외)
+  const yesVotes = room.players.filter(
+    (p) => p.isAlive && p.executionVote === "yes" && p.nickname !== room.nominatedPlayer,
+  ).length
+  const noVotes = room.players.filter(
+    (p) => p.isAlive && p.executionVote === "no" && p.nickname !== room.nominatedPlayer,
+  ).length
   const totalVotes = yesVotes + noVotes
 
   // 과반수 찬성 여부 확인
@@ -516,7 +525,7 @@ function processExecutionResult(roomId) {
     target: room.nominatedPlayer,
     executed,
     votes: room.players
-      .filter((p) => p.isAlive && p.executionVote !== null)
+      .filter((p) => p.isAlive && p.executionVote !== null && p.nickname !== room.nominatedPlayer)
       .map((p) => ({
         nickname: p.nickname,
         vote: p.executionVote,
@@ -546,11 +555,11 @@ function processExecutionResult(roomId) {
     phase: "day",
     subPhase: "result",
     day: room.day,
-    timeLeft: 5, // 5초로 설정
+    timeLeft: 10, // 10초로 설정 (이전 5초에서 변경)
     voteResult,
   })
 
-  // 타이머 시작 (5초)를 (10초)로 변경
+  // 타이머 시작 (10초)
   startTimer(roomId, 10, () => {
     // 게임 종료 조건 확인
     if (executed) {

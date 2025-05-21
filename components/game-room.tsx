@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle } from "lucide-react"
+import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { NominationVoteModal } from "./nomination-vote-modal"
 import { ExecutionVoteModal } from "./execution-vote-modal"
 import { VoteResultPopup } from "./vote-result-popup"
+import { toast } from "sonner"
 
 interface GameRoomProps {
   players: Player[]
@@ -55,6 +56,7 @@ export function GameRoom({
   const [mafiaTarget, setMafiaTarget] = useState<string | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const [localTimeLeft, setLocalTimeLeft] = useState<number>(timeLeft)
+  const [isTimerCritical, setIsTimerCritical] = useState(false)
 
   // 모달 상태
   const [showNominationModal, setShowNominationModal] = useState(false)
@@ -71,6 +73,8 @@ export function GameRoom({
   const [timeLeftState, setTimeLeft] = useState(timeLeft)
   const [nominatedPlayerState, setNominatedPlayer] = useState(nominatedPlayer)
   const [voteResultState, setVoteResult] = useState(voteResult)
+  const [prevPhase, setPrevPhase] = useState<string | null>(null)
+  const [prevSubPhase, setPrevSubPhase] = useState<string | null>(null)
 
   const currentPlayer = players.find((p) => p.nickname === nickname) || {
     id: "",
@@ -109,6 +113,10 @@ export function GameRoom({
     }) => {
       console.log("Received phase change:", data)
 
+      // 이전 상태 저장
+      setPrevPhase(phaseState)
+      setPrevSubPhase(subPhaseState)
+
       // 페이즈 변경 애니메이션 트리거
       if (data.phase !== phaseState || data.subPhase !== subPhaseState) {
         setPhaseChangeAnimation(true)
@@ -132,6 +140,87 @@ export function GameRoom({
     },
     [phaseState, subPhaseState],
   )
+
+  // 페이즈 변경 시 토스트 알림 표시
+  useEffect(() => {
+    // 페이즈나 서브페이즈가 변경되었을 때만 실행
+    if ((prevPhase !== null && prevPhase !== phaseState) || (prevSubPhase !== null && prevSubPhase !== subPhaseState)) {
+      // 페이즈 변경 알림 메시지 생성
+      let title = ""
+      let description = ""
+      let icon = null
+
+      if (phaseState === "day" && prevPhase === "night") {
+        title = `${dayState}일차 낮이 시작되었습니다`
+        description = "모든 플레이어가 깨어납니다. 마피아를 찾아내세요!"
+        icon = <SunIcon className="h-5 w-5 text-yellow-500" />
+
+        // 낮 시작 토스트 알림
+        toast(title, {
+          description: description,
+          icon: icon,
+          duration: 3000,
+          position: "top-center",
+          className: "bg-yellow-50 border-yellow-200 text-yellow-900",
+        })
+      } else if (phaseState === "night" && prevPhase === "day") {
+        title = "밤이 되었습니다"
+        description = isMafia ? "마피아는 제거할 대상을 선택하세요." : "마피아의 행동을 기다리는 중입니다."
+        icon = <MoonIcon className="h-5 w-5 text-blue-500" />
+
+        // 밤 시작 토스트 알림
+        toast(title, {
+          description: description,
+          icon: icon,
+          duration: 3000,
+          position: "top-center",
+          className:
+            "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900 dark:border-blue-800 dark:text-blue-100",
+        })
+      } else if (phaseState === "day") {
+        // 낮 서브페이즈 변경 알림
+        if (subPhaseState === "discussion" && prevSubPhase !== "discussion") {
+          title = "자유 토론 시간"
+          description = "의심되는 플레이어에 대해 토론하세요."
+
+          toast(title, {
+            description: description,
+            icon: <Info className="h-5 w-5 text-blue-500" />,
+            duration: 2000,
+          })
+        } else if (subPhaseState === "nomination" && prevSubPhase !== "nomination") {
+          title = "의심 지목 투표 시간"
+          description = "의심되는 플레이어를 지목해주세요."
+
+          toast(title, {
+            description: description,
+            icon: <AlertCircle className="h-5 w-5 text-orange-500" />,
+            duration: 2000,
+          })
+        } else if (subPhaseState === "defense" && prevSubPhase !== "defense") {
+          title = "최후 변론 시간"
+          description =
+            nominatedPlayerState === nickname
+              ? "당신이 지목되었습니다. 최후 변론을 하세요."
+              : `${nominatedPlayerState}님의 최후 변론 시간입니다.`
+
+          toast(title, {
+            description: description,
+            duration: 2000,
+          })
+        } else if (subPhaseState === "execution" && prevSubPhase !== "execution") {
+          title = "처형 투표 시간"
+          description = `${nominatedPlayerState}님을 처형할지 투표해주세요.`
+
+          toast(title, {
+            description: description,
+            icon: <AlertCircle className="h-5 w-5 text-red-500" />,
+            duration: 2000,
+          })
+        }
+      }
+    }
+  }, [phaseState, subPhaseState, prevPhase, prevSubPhase, dayState, isMafia, nickname, nominatedPlayerState])
 
   // 서브페이즈 변경 감지 및 모달 표시
   useEffect(() => {
@@ -167,6 +256,9 @@ export function GameRoom({
   useEffect(() => {
     // 서버에서 받은 timeLeft 값으로 localTimeLeft 업데이트
     setLocalTimeLeft(timeLeft)
+
+    // 타이머가 5초 이하로 남았을 때 임계값 상태 설정
+    setIsTimerCritical(timeLeft <= 5 && timeLeft > 0)
   }, [timeLeft])
 
   useEffect(() => {
@@ -229,7 +321,12 @@ export function GameRoom({
     if (localTimeLeft <= 0) return
 
     const timer = setInterval(() => {
-      setLocalTimeLeft((prev) => Math.max(0, prev - 1))
+      setLocalTimeLeft((prev) => {
+        const newTime = Math.max(0, prev - 1)
+        // 타이머가 5초 이하로 남았을 때 임계값 상태 설정
+        setIsTimerCritical(newTime <= 5 && newTime > 0)
+        return newTime
+      })
     }, 1000)
 
     return () => clearInterval(timer)
@@ -414,8 +511,17 @@ export function GameRoom({
                       })`}
                   </span>
                 </div>
-                <div className="text-sm">
-                  <span className="font-mono">
+
+                {/* 개선된 타이머 UI */}
+                <div
+                  className={`flex items-center px-3 py-1 rounded-full ${
+                    isTimerCritical
+                      ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse"
+                      : "bg-secondary/50"
+                  }`}
+                >
+                  <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
+                  <span className={`font-mono ${isTimerCritical ? "font-bold text-red-600 dark:text-red-400" : ""}`}>
                     {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
                   </span>
                 </div>
@@ -451,20 +557,31 @@ export function GameRoom({
               <h3 className="text-sm font-medium mb-2">
                 생존자 ({alivePlayers.length}/{players.length})
               </h3>
-              {/* 플레이어 목록 렌더링 부분 수정 */}
+              {/* 플레이어 목록 렌더링 부분 수정 - 사망자 표시 개선 */}
               <div className="space-y-2">
                 {players.map((player) => (
                   <div
                     key={player.id}
                     className={`flex items-center justify-between p-2 rounded-md ${
-                      player.isAlive ? "bg-secondary" : "bg-secondary/30 text-muted-foreground line-through"
+                      player.isAlive
+                        ? "bg-secondary"
+                        : "bg-secondary/30 text-muted-foreground border border-gray-300/20"
                     } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
                   >
                     <div className="flex items-center">
-                      <UserIcon className="h-4 w-4 mr-2" />
-                      <span>{player.nickname}</span>
-                      {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
-                      {!player.isAlive && <span className="ml-2 text-xs">(사망)</span>}
+                      {/* 사망자 아이콘 및 스타일 개선 */}
+                      {player.isAlive ? (
+                        <UserIcon className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Ghost className="h-4 w-4 mr-2 text-gray-400" />
+                      )}
+                      <div className={`flex flex-col ${!player.isAlive ? "grayscale opacity-70" : ""}`}>
+                        <span className={player.isAlive ? "" : "line-through"}>
+                          {player.nickname}
+                          {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
+                        </span>
+                        {!player.isAlive && <span className="text-xs text-red-400 dark:text-red-500">사망</span>}
+                      </div>
                       {isMafia && player.role === "mafia" && (
                         <span className="ml-2 text-xs text-red-500">(마피아)</span>
                       )}
@@ -536,7 +653,11 @@ export function GameRoom({
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-muted/50 px-4 py-2 rounded-full text-sm">{group.messages[0].content}</div>
+                          // 시스템 메시지 스타일 개선
+                          <div className="bg-blue-100 dark:bg-blue-900/30 px-4 py-2 rounded-full text-sm flex items-center text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800/50 my-1">
+                            <Info className="h-4 w-4 mr-2 text-blue-500" />
+                            {group.messages[0].content}
+                          </div>
                         )}
                       </div>
                     ))

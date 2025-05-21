@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Check, X } from "lucide-react"
+import { Check, X, Clock } from "lucide-react"
 import type { VoteResult } from "@/types/game"
 
 interface VoteResultPopupProps {
@@ -69,6 +69,9 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
   const yesVotes = result.votes.filter((v) => v.vote === "yes").length
   const noVotes = result.votes.filter((v) => v.vote === "no").length
 
+  // 타이머 임계값 확인 (5초 이하)
+  const isTimerCritical = timeLeft <= 5 && timeLeft > 0
+
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
@@ -76,7 +79,17 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
       <div ref={modalRef} className={`w-full max-w-md ${isExiting ? "modal-exit" : "modal-enter"}`}>
         <Card>
           <CardHeader>
-            <CardTitle className="text-center">투표 결과</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>투표 결과</span>
+              <div
+                className={`flex items-center text-sm font-normal px-2 py-1 rounded-full ${
+                  isTimerCritical ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse" : ""
+                }`}
+              >
+                <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
+                <span className={isTimerCritical ? "font-bold" : ""}>{timeLeft}초</span>
+              </div>
+            </CardTitle>
             {/* 타이머 바 추가 */}
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-2">
               <div

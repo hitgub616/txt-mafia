@@ -89,6 +89,9 @@ export function ExecutionVoteModal({
     }, 200) // 애니메이션 시간과 일치시킴
   }
 
+  // 타이머 임계값 확인 (5초 이하)
+  const isTimerCritical = timeLeft <= 5 && timeLeft > 0
+
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
@@ -98,9 +101,13 @@ export function ExecutionVoteModal({
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span>처형 투표</span>
-              <div className="flex items-center text-sm font-normal">
-                <Clock className="h-4 w-4 mr-1" />
-                <span>{timeLeft}초</span>
+              <div
+                className={`flex items-center text-sm font-normal px-2 py-1 rounded-full ${
+                  isTimerCritical ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse" : ""
+                }`}
+              >
+                <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
+                <span className={isTimerCritical ? "font-bold" : ""}>{timeLeft}초</span>
               </div>
             </CardTitle>
             {/* 타이머 바 추가 */}
