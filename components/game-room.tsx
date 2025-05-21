@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import type { Socket } from "socket.io-client"
-import type { Player } from "@/types/game"
+import type { Player, VoteResult, DaySubPhase } from "@/types/game"
 import type { ChatMessage } from "@/types/chat"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,18 +12,24 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { NominationVoteModal } from "./nomination-vote-modal"
+import { ExecutionVoteModal } from "./execution-vote-modal"
+import { VoteResultPopup } from "./vote-result-popup"
 
 interface GameRoomProps {
   players: Player[]
   role: "mafia" | "citizen" | null
   day: number
   phase: "day" | "night"
+  subPhase?: DaySubPhase | null
   socket: Socket | null
   roomId: string
   nickname: string
   isOfflineMode?: boolean
   offlineGame?: any
   timeLeft?: number
+  nominatedPlayer?: string | null
+  voteResult?: VoteResult | null
 }
 
 export function GameRoom({
@@ -31,37 +37,125 @@ export function GameRoom({
   role,
   day,
   phase,
+  subPhase,
   socket,
   roomId,
   nickname,
   isOfflineMode = false,
   offlineGame,
   timeLeft = 0,
+  nominatedPlayer,
+  voteResult,
 }: GameRoomProps) {
   const router = useRouter()
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [votedFor, setVotedFor] = useState<string | null>(null)
-  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
+  const [nominationVotes, setNominationVotes] = useState<Record<string, number>>({})
+  const [executionVotes, setExecutionVotes] = useState<{ yes: number; no: number }>({ yes: 0, no: 0 })
   const [mafiaTarget, setMafiaTarget] = useState<string | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const [localTimeLeft, setLocalTimeLeft] = useState<number>(timeLeft)
 
-  const currentPlayer = players.find((p) => p.nickname === nickname)
+  // 모달 상태
+  const [showNominationModal, setShowNominationModal] = useState(false)
+  const [showExecutionModal, setShowExecutionModal] = useState(false)
+  const [showVoteResultPopup, setShowVoteResultPopup] = useState(false)
+  const [localVoteResult, setLocalVoteResult] = useState<VoteResult | null>(null)
+
+  // 페이즈 변경 애니메이션을 위한 상태 추가
+  const [phaseChangeAnimation, setPhaseChangeAnimation] = useState(false)
+
+  const [phaseState, setPhase] = useState(phase)
+  const [subPhaseState, setSubPhase] = useState(subPhase)
+  const [dayState, setDay] = useState(day)
+  const [timeLeftState, setTimeLeft] = useState(timeLeft)
+  const [nominatedPlayerState, setNominatedPlayer] = useState(nominatedPlayer)
+  const [voteResultState, setVoteResult] = useState(voteResult)
+
+  const currentPlayer = players.find((p) => p.nickname === nickname) || {
+    id: "",
+    nickname,
+    isHost: false,
+    role: null,
+    isAlive: true,
+    vote: null,
+    nominationVote: null,
+    executionVote: null,
+  }
+
   const isAlive = currentPlayer?.isAlive ?? true
   const isMafia = role === "mafia"
-  const canChat = isAlive && (phase === "day" || (phase === "night" && isMafia))
-
-  // 마피아는 낮에 투표할 수 없도록 수정
-  const canVote = isAlive && phase === "day" && !votedFor && role !== "mafia"
-
-  const canTarget = isAlive && phase === "night" && isMafia && !mafiaTarget
+  const canChat =
+    isAlive &&
+    ((phaseState === "day" && subPhaseState !== "defense") || // 낮에는 최후 변론 단계가 아니면 채팅 가능
+      (phaseState === "day" && subPhaseState === "defense" && nickname === nominatedPlayerState) || // 최후 변론 단계에서는 지목된 플레이어만 채팅 가능
+      (phaseState === "night" && isMafia)) // 밤에는 마피아만 채팅 가능
 
   // Get alive players
   const alivePlayers = players.filter((p) => p.isAlive)
 
   // Get mafia players (only visible to mafia)
   const mafiaPlayers = isMafia ? players.filter((p) => p.role === "mafia" && p.isAlive) : []
+
+  // 페이즈 변경 핸들러 수정 (handlePhaseChange 함수 내부에 추가)
+  const handlePhaseChange = useCallback(
+    (data: {
+      phase: "day" | "night"
+      subPhase?: DaySubPhase | null
+      day: number
+      timeLeft: number
+      nominatedPlayer?: string | null
+      voteResult?: VoteResult | null
+    }) => {
+      console.log("Received phase change:", data)
+
+      // 페이즈 변경 애니메이션 트리거
+      if (data.phase !== phaseState || data.subPhase !== subPhaseState) {
+        setPhaseChangeAnimation(true)
+        setTimeout(() => {
+          setPhaseChangeAnimation(false)
+        }, 1000)
+      }
+
+      setPhase(data.phase)
+      setSubPhase(data.subPhase || null)
+      setDay(data.day)
+      setTimeLeft(data.timeLeft)
+
+      if (data.nominatedPlayer !== undefined) {
+        setNominatedPlayer(data.nominatedPlayer)
+      }
+
+      if (data.voteResult) {
+        setVoteResult(data.voteResult)
+      }
+    },
+    [phaseState, subPhaseState],
+  )
+
+  // 서브페이즈 변경 감지 및 모달 표시
+  useEffect(() => {
+    if (phaseState === "day") {
+      if (subPhaseState === "nomination" && isAlive) {
+        setShowNominationModal(true)
+      } else {
+        setShowNominationModal(false)
+      }
+
+      if (subPhaseState === "execution" && isAlive) {
+        setShowExecutionModal(true)
+      } else {
+        setShowExecutionModal(false)
+      }
+
+      if (subPhaseState === "result" && voteResultState) {
+        setLocalVoteResult(voteResultState)
+        setShowVoteResultPopup(true)
+      } else {
+        setShowVoteResultPopup(false)
+      }
+    }
+  }, [phaseState, subPhaseState, isAlive, voteResultState])
 
   useEffect(() => {
     // 서버에서 받은 timeLeft 값으로 localTimeLeft 업데이트
@@ -72,7 +166,6 @@ export function GameRoom({
     if (isOfflineMode && offlineGame) {
       // Use offline game state
       setMessages(offlineGame.messages)
-      setVoteCounts(offlineGame.voteCounts)
       return
     }
 
@@ -93,34 +186,31 @@ export function GameRoom({
         ])
       }
 
-      const handleVoteUpdate = (votes: Record<string, number>) => {
-        setVoteCounts(votes)
+      const handleNominationVoteUpdate = (votes: Record<string, number>) => {
+        setNominationVotes(votes)
       }
 
-      const handlePhaseChange = ({
-        phase,
-        day,
-        timeLeft,
-      }: { phase: "day" | "night"; day: number; timeLeft: number }) => {
-        setVotedFor(null)
-        setMafiaTarget(null)
+      const handleExecutionVoteUpdate = (votes: { yes: number; no: number }) => {
+        setExecutionVotes(votes)
       }
 
       // 이벤트 리스너 등록
       socket.on("chatMessage", handleChatMessage)
       socket.on("systemMessage", handleSystemMessage)
-      socket.on("voteUpdate", handleVoteUpdate)
+      socket.on("nominationVoteUpdate", handleNominationVoteUpdate)
+      socket.on("executionVoteUpdate", handleExecutionVoteUpdate)
       socket.on("phaseChange", handlePhaseChange)
 
       return () => {
         // 이벤트 리스너 제거
         socket.off("chatMessage", handleChatMessage)
         socket.off("systemMessage", handleSystemMessage)
-        socket.off("voteUpdate", handleVoteUpdate)
+        socket.off("nominationVoteUpdate", handleNominationVoteUpdate)
+        socket.off("executionVoteUpdate", handleExecutionVoteUpdate)
         socket.off("phaseChange", handlePhaseChange)
       }
     }
-  }, [socket, isOfflineMode, offlineGame])
+  }, [socket, isOfflineMode, offlineGame, phaseState, subPhaseState, handlePhaseChange])
 
   // Auto scroll to bottom when new messages arrive
   useEffect(() => {
@@ -143,37 +233,39 @@ export function GameRoom({
     if (!message.trim() || !canChat) return
 
     if (isOfflineMode && offlineGame) {
-      offlineGame.sendMessage(message, phase === "night" && isMafia)
+      offlineGame.sendMessage(message, phaseState === "night" && isMafia)
     } else if (socket) {
       socket.emit("sendMessage", {
         roomId,
         sender: nickname,
         content: message,
-        isMafiaChat: phase === "night" && isMafia,
+        isMafiaChat: phaseState === "night" && isMafia,
       })
     }
 
     setMessage("")
   }
 
-  const handleVote = (targetNickname: string) => {
-    if (!canVote) return
+  const handleNominationVote = (target: string | null) => {
+    if (!socket || !isAlive) return
 
-    if (isOfflineMode && offlineGame) {
-      offlineGame.handleVote(nickname, targetNickname)
-      setVotedFor(targetNickname)
-    } else if (socket) {
-      socket.emit("vote", {
-        roomId,
-        voter: nickname,
-        target: targetNickname,
-      })
-      setVotedFor(targetNickname)
-    }
+    socket.emit("submitNominationVote", {
+      roomId,
+      target,
+    })
+  }
+
+  const handleExecutionVote = (vote: "yes" | "no" | null) => {
+    if (!socket || !isAlive) return
+
+    socket.emit("submitExecutionVote", {
+      roomId,
+      vote,
+    })
   }
 
   const handleMafiaTarget = (targetNickname: string) => {
-    if (!canTarget) return
+    if (!isMafia || !isAlive) return
 
     if (isOfflineMode && offlineGame) {
       offlineGame.handleMafiaTarget(targetNickname)
@@ -215,18 +307,18 @@ export function GameRoom({
       return false
     })
 
-    const groupedMessages: { messages: ChatMessage[]; sender: string; isSystem: boolean }[] = []
+    const groupedMessages: { messages: ChatMessage[]; sender: string; isSystem: boolean; timestamp: string }[] = []
 
     filteredMessages.forEach((msg, index) => {
       // 시스템 메시지는 항상 별도 그룹
       if (msg.isSystem) {
-        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: true })
+        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: true, timestamp: msg.timestamp })
         return
       }
 
       // 이전 그룹이 없거나, 이전 그룹이 시스템 메시지이거나, 발신자가 다르면 새 그룹 생성
       if (index === 0 || filteredMessages[index - 1].isSystem || filteredMessages[index - 1].sender !== msg.sender) {
-        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: false })
+        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: false, timestamp: msg.timestamp })
       } else {
         // 이전 메시지와 같은 발신자면 기존 그룹에 추가
         groupedMessages[groupedMessages.length - 1].messages.push(msg)
@@ -234,6 +326,36 @@ export function GameRoom({
     })
 
     return groupedMessages
+  }
+
+  // 현재 페이즈에 대한 설명 텍스트
+  const getPhaseDescription = () => {
+    if (phaseState === "night") {
+      return isMafia
+        ? "밤이 되었습니다. 제거할 대상을 선택하세요."
+        : "밤이 되었습니다. 마피아의 행동을 기다리는 중입니다."
+    }
+
+    if (phaseState === "day") {
+      switch (subPhaseState) {
+        case "discussion":
+          return `${dayState}일차 낮이 시작되었습니다. 자유롭게 토론하세요.`
+        case "nomination":
+          return "의심되는 플레이어를 지목해주세요."
+        case "defense":
+          return nominatedPlayerState === nickname
+            ? "당신이 지목되었습니다. 최후 변론을 하세요."
+            : `${nominatedPlayerState}님의 최후 변론 시간입니다.`
+        case "execution":
+          return `${nominatedPlayerState}님을 처형할지 투표해주세요.`
+        case "result":
+          return "투표 결과를 확인하세요."
+        default:
+          return `${dayState}일차 낮입니다.`
+      }
+    }
+
+    return ""
   }
 
   return (
@@ -245,13 +367,26 @@ export function GameRoom({
             <CardHeader className="pb-2">
               <div className="flex justify-between items-center">
                 <div className="flex items-center">
-                  {phase === "day" ? (
+                  {phaseState === "day" ? (
                     <SunIcon className="h-5 w-5 mr-2 text-yellow-500" />
                   ) : (
                     <MoonIcon className="h-5 w-5 mr-2 text-blue-500" />
                   )}
                   <span className="font-bold">
-                    {day}일차 {phase === "day" ? "낮" : "밤"}
+                    {dayState}일차 {phaseState === "day" ? "낮" : "밤"}
+                    {subPhaseState &&
+                      phaseState === "day" &&
+                      ` (${
+                        subPhaseState === "discussion"
+                          ? "토론"
+                          : subPhaseState === "nomination"
+                            ? "지목"
+                            : subPhaseState === "defense"
+                              ? "변론"
+                              : subPhaseState === "execution"
+                                ? "투표"
+                                : "결과"
+                      })`}
                   </span>
                 </div>
                 <div className="text-sm">
@@ -259,6 +394,13 @@ export function GameRoom({
                     {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
                   </span>
                 </div>
+              </div>
+
+              {/* 페이즈 설명 */}
+              <div
+                className={`mt-2 p-2 bg-secondary/50 rounded-md text-sm ${phaseChangeAnimation ? "pulse-vote" : ""}`}
+              >
+                {getPhaseDescription()}
               </div>
 
               {/* 내 역할 표시 */}
@@ -283,13 +425,15 @@ export function GameRoom({
               <h3 className="text-sm font-medium mb-2">
                 생존자 ({alivePlayers.length}/{players.length})
               </h3>
+              {/* 플레이어 목록 렌더링 부분 수정 */}
               <div className="space-y-2">
-                {players.map((player) => (
+                {players.map((player, index) => (
                   <div
                     key={player.id}
                     className={`flex items-center justify-between p-2 rounded-md ${
                       player.isAlive ? "bg-secondary" : "bg-secondary/30 text-muted-foreground line-through"
-                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
+                    } ${player.nickname === nickname ? "border border-primary/50" : ""} slide-in-bottom`}
+                    style={{ animationDelay: `${0.05 * index}s` }}
                   >
                     <div className="flex items-center">
                       <UserIcon className="h-4 w-4 mr-2" />
@@ -301,25 +445,13 @@ export function GameRoom({
                       )}
                     </div>
 
-                    {/* Vote button (day phase) - 마피아는 낮에 투표할 수 없음 */}
-                    {phase === "day" && player.isAlive && player.nickname !== nickname && isAlive && !isMafia && (
-                      <Button
-                        variant={votedFor === player.nickname ? "destructive" : "outline"}
-                        size="sm"
-                        disabled={!canVote}
-                        onClick={() => handleVote(player.nickname)}
-                      >
-                        {voteCounts[player.nickname] ? `투표 (${voteCounts[player.nickname]})` : "투표"}
-                      </Button>
-                    )}
-
-                    {/* Target button (night phase, mafia only) */}
+                    {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만) */}
                     {phase === "night" && isMafia && player.isAlive && player.role !== "mafia" && (
                       <Button
                         variant={mafiaTarget === player.nickname ? "destructive" : "outline"}
                         size="sm"
-                        disabled={!canTarget}
                         onClick={() => handleMafiaTarget(player.nickname)}
+                        className={mafiaTarget === player.nickname ? "pulse-vote" : "vote-highlight"}
                       >
                         {mafiaTarget === player.nickname ? "선택됨" : "암살"}
                       </Button>
@@ -330,11 +462,15 @@ export function GameRoom({
 
               {/* Mafia list (only visible to mafia) */}
               {isMafia && mafiaPlayers.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4 slide-in-bottom" style={{ animationDelay: "0.3s" }}>
                   <h3 className="text-sm font-medium mb-2 text-red-500">마피아 팀</h3>
                   <div className="space-y-2">
-                    {mafiaPlayers.map((player) => (
-                      <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30">
+                    {mafiaPlayers.map((player, index) => (
+                      <div
+                        key={player.id}
+                        className="flex items-center p-2 rounded-md bg-red-900/30 slide-in-bottom"
+                        style={{ animationDelay: `${0.4 + index * 0.05}s` }}
+                      >
                         <UserIcon className="h-4 w-4 mr-2" />
                         <span>{player.nickname}</span>
                       </div>
@@ -351,13 +487,13 @@ export function GameRoom({
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-2">
               <h3 className="font-medium">
-                {phase === "day" ? "전체 채팅" : isMafia ? "마피아 채팅" : "밤이 되었습니다"}
+                {phaseState === "day" ? "전체 채팅" : isMafia ? "마피아 채팅" : "밤이 되었습니다"}
               </h3>
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
               <ScrollArea className="h-[calc(100vh-300px)]">
                 <div className="space-y-4">
-                  {phase === "night" && !isMafia ? (
+                  {phaseState === "night" && !isMafia ? (
                     <div className="flex items-center justify-center h-[calc(100vh-400px)]">
                       <div className="text-center">
                         <MoonIcon className="h-12 w-12 mx-auto mb-4 text-blue-500" />
@@ -372,14 +508,23 @@ export function GameRoom({
                             <div className="space-y-1">
                               <div className="text-xs text-muted-foreground mb-1">{group.sender}</div>
                               {group.messages.map((msg, msgIndex) => (
-                                <div key={msgIndex} className="bg-secondary p-3 rounded-lg mb-1">
+                                <div
+                                  key={msgIndex}
+                                  className="bg-secondary p-3 rounded-lg mb-1 slide-in-bottom"
+                                  style={{ animationDelay: `${msgIndex * 0.05}s` }}
+                                >
                                   {msg.content}
                                 </div>
                               ))}
                             </div>
                           </div>
                         ) : (
-                          <div className="bg-muted/50 px-4 py-2 rounded-full text-sm">{group.messages[0].content}</div>
+                          <div
+                            className="bg-muted/50 px-4 py-2 rounded-full text-sm slide-in-top"
+                            style={{ animationDelay: "0.1s" }}
+                          >
+                            {group.messages[0].content}
+                          </div>
                         )}
                       </div>
                     ))
@@ -396,9 +541,11 @@ export function GameRoom({
                   placeholder={
                     !isAlive
                       ? "사망한 플레이어는 채팅할 수 없습니다"
-                      : phase === "night" && !isMafia
+                      : phaseState === "night" && !isMafia
                         ? "밤에는 채팅할 수 없습니다"
-                        : "메시지를 입력하세요"
+                        : phaseState === "day" && subPhaseState === "defense" && nickname !== nominatedPlayerState
+                          ? "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다"
+                          : "메시지를 입력하세요"
                   }
                   disabled={!canChat}
                 />
@@ -410,6 +557,36 @@ export function GameRoom({
           </Card>
         </div>
       </div>
+
+      {/* 의심 지목 투표 모달 */}
+      {showNominationModal && (
+        <NominationVoteModal
+          players={players}
+          currentPlayer={currentPlayer}
+          timeLeft={localTimeLeft}
+          onVote={handleNominationVote}
+          onClose={() => setShowNominationModal(false)}
+        />
+      )}
+
+      {/* 처형 투표 모달 */}
+      {showExecutionModal && nominatedPlayerState && (
+        <ExecutionVoteModal
+          nominatedPlayer={nominatedPlayerState}
+          timeLeft={localTimeLeft}
+          onVote={handleExecutionVote}
+          onClose={() => setShowExecutionModal(false)}
+        />
+      )}
+
+      {/* 투표 결과 팝업 */}
+      {showVoteResultPopup && localVoteResult && (
+        <VoteResultPopup
+          result={localVoteResult}
+          timeLeft={localTimeLeft}
+          onClose={() => setShowVoteResultPopup(false)}
+        />
+      )}
     </div>
   )
 }

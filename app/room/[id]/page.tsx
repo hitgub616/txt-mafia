@@ -7,7 +7,7 @@ import { WaitingRoom } from "@/components/waiting-room"
 import { RoleReveal } from "@/components/role-reveal"
 import { GameOver } from "@/components/game-over"
 import { useSocket } from "@/hooks/use-socket"
-import type { Player, GameState } from "@/types/game"
+import type { Player, GameState, DaySubPhase, VoteResult } from "@/types/game"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -22,11 +22,14 @@ export default function RoomPage() {
   const [winner, setWinner] = useState<"mafia" | "citizen" | null>(null)
   const [day, setDay] = useState(1)
   const [phase, setPhase] = useState<"day" | "night">("day")
+  const [subPhase, setSubPhase] = useState<DaySubPhase | null>(null)
   const [isHost, setIsHost] = useState(false)
   const [nickname, setNickname] = useState("")
   const [hasJoined, setHasJoined] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
   const [timeLeft, setTimeLeft] = useState(0)
+  const [nominatedPlayer, setNominatedPlayer] = useState<string | null>(null)
+  const [voteResult, setVoteResult] = useState<VoteResult | null>(null)
 
   const eventListenersSetupRef = useRef(false)
 
@@ -64,6 +67,7 @@ export default function RoomPage() {
       role?: "mafia" | "citizen"
       day?: number
       phase?: "day" | "night"
+      subPhase?: DaySubPhase | null
       winner?: "mafia" | "citizen"
     }) => {
       console.log("Received game state update:", data)
@@ -81,6 +85,10 @@ export default function RoomPage() {
         setPhase(data.phase)
       }
 
+      if (data.subPhase !== undefined) {
+        setSubPhase(data.subPhase)
+      }
+
       if (data.winner) {
         setWinner(data.winner)
       }
@@ -89,17 +97,51 @@ export default function RoomPage() {
   )
 
   // 페이즈 변경 핸들러
-  const handlePhaseChange = useCallback((data: { phase: "day" | "night"; day: number; timeLeft: number }) => {
-    console.log("Received phase change:", data)
-    setPhase(data.phase)
-    setDay(data.day)
-    setTimeLeft(data.timeLeft)
-  }, [])
+  const handlePhaseChange = useCallback(
+    (data: {
+      phase: "day" | "night"
+      subPhase?: DaySubPhase | null
+      day: number
+      timeLeft: number
+      nominatedPlayer?: string | null
+      voteResult?: VoteResult | null
+    }) => {
+      console.log("Received phase change:", data)
+      setPhase(data.phase)
+      setSubPhase(data.subPhase || null)
+      setDay(data.day)
+      setTimeLeft(data.timeLeft)
+
+      if (data.nominatedPlayer !== undefined) {
+        setNominatedPlayer(data.nominatedPlayer)
+      }
+
+      if (data.voteResult) {
+        setVoteResult(data.voteResult)
+      }
+    },
+    [],
+  )
 
   // 시간 업데이트 핸들러
   const handleTimeUpdate = useCallback((time: number) => {
     console.log("Received time update:", time)
     setTimeLeft(time)
+  }, [])
+
+  // 지목 결과 핸들러
+  const handleNominationResult = useCallback(
+    (data: { nominated: string | null; votes: Record<string, number>; reason?: string }) => {
+      console.log("Received nomination result:", data)
+      setNominatedPlayer(data.nominated)
+    },
+    [],
+  )
+
+  // 처형 결과 핸들러
+  const handleExecutionResult = useCallback((result: VoteResult) => {
+    console.log("Received execution result:", result)
+    setVoteResult(result)
   }, [])
 
   // 소켓 연결 및 방 참가 로직
@@ -129,6 +171,8 @@ export default function RoomPage() {
     socket.on("gameStateUpdate", handleGameStateUpdate)
     socket.on("phaseChange", handlePhaseChange)
     socket.on("timeUpdate", handleTimeUpdate)
+    socket.on("nominationResult", handleNominationResult)
+    socket.on("executionResult", handleExecutionResult)
     socket.on("systemMessage", (message: string) => {
       console.log("System message:", message)
     })
@@ -142,10 +186,21 @@ export default function RoomPage() {
       socket.off("gameStateUpdate", handleGameStateUpdate)
       socket.off("phaseChange", handlePhaseChange)
       socket.off("timeUpdate", handleTimeUpdate)
+      socket.off("nominationResult", handleNominationResult)
+      socket.off("executionResult", handleExecutionResult)
       socket.off("systemMessage")
       eventListenersSetupRef.current = false
     }
-  }, [socket, isConnected, handlePlayersUpdate, handleGameStateUpdate, handlePhaseChange, handleTimeUpdate])
+  }, [
+    socket,
+    isConnected,
+    handlePlayersUpdate,
+    handleGameStateUpdate,
+    handlePhaseChange,
+    handleTimeUpdate,
+    handleNominationResult,
+    handleExecutionResult,
+  ])
 
   // Handle disconnection
   useEffect(() => {
@@ -232,10 +287,13 @@ export default function RoomPage() {
         role={role}
         day={day}
         phase={phase}
+        subPhase={subPhase}
         socket={socket}
         roomId={roomId}
         nickname={nickname}
         timeLeft={timeLeft}
+        nominatedPlayer={nominatedPlayer}
+        voteResult={voteResult}
       />
     )
   }

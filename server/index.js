@@ -130,6 +130,7 @@ function logRoomInfo(roomId) {
 
   console.log(`Room ${roomId} info:`)
   console.log(`- State: ${room.state}`)
+  console.log(`- Phase: ${room.phase}, SubPhase: ${room.subPhase}`)
   console.log(
     `- Players (${room.players.length}):`,
     room.players.map((p) => `${p.nickname}${p.isHost ? " (Host)" : ""} [${p.id}]`),
@@ -167,92 +168,402 @@ function startTimer(roomId, duration, callback) {
   }, 1000)
 }
 
-// 낮 페이즈 시작 함수
+// 낮 페이즈 시작 함수 (자유 토론 단계)
 function startDayPhase(roomId, day) {
   const room = rooms.get(roomId)
   if (!room) return
 
   room.phase = "day"
+  room.subPhase = "discussion" // 자유 토론 단계
   room.day = day || room.day
+  room.nominatedPlayer = null // 지목된 플레이어 초기화
 
   // 투표 초기화
   room.players.forEach((player) => {
     player.vote = null
+    player.nominationVote = null
+    player.executionVote = null
   })
 
   // 페이즈 변경 이벤트 전송
   io.to(roomId).emit("phaseChange", {
     phase: "day",
+    subPhase: "discussion",
     day: room.day,
-    timeLeft: 15, // 15초로 변경
+    timeLeft: 15, // 15초로 설정
   })
 
   // 시스템 메시지 전송
-  io.to(roomId).emit("systemMessage", `${room.day}일차 낮이 시작되었습니다.`)
+  io.to(roomId).emit("systemMessage", `${room.day}일차 낮이 시작되었습니다. 자유롭게 토론하세요.`)
 
   // 타이머 시작 (15초)
   startTimer(roomId, 15, () => {
-    // 시간이 다 되면 밤 페이즈로 전환
-    endDayPhase(roomId)
+    // 시간이 다 되면 의심 지목 단계로 전환
+    startNominationPhase(roomId)
   })
 
-  // AI 플레이어 행동 처리 (약간의 지연 후)
+  // AI 플레이어 채팅 (약간의 지연 후)
   setTimeout(() => {
-    handleAiActions(roomId)
+    handleAiDiscussion(roomId)
   }, 2000)
 }
 
-// 낮 페이즈 종료 함수
-function endDayPhase(roomId) {
+// AI 플레이어 토론 처리
+function handleAiDiscussion(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || room.state !== "playing" || room.subPhase !== "discussion") return
+
+  // AI 플레이어 찾기
+  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
+  if (aiPlayers.length === 0) return
+
+  // 각 AI 플레이어에 대해 랜덤하게 채팅 메시지 전송
+  aiPlayers.forEach((ai) => {
+    if (Math.random() < 0.7) {
+      // 70% 확률로 메시지 전송
+      setTimeout(() => {
+        if (room.subPhase !== "discussion") return // 단계가 변경되었으면 중단
+
+        const messages = ai.role === "mafia" ? MAFIA_AI_CHAT_MESSAGES : AI_CHAT_MESSAGES
+        const randomMessage = messages[Math.floor(Math.random() * messages.length)]
+
+        io.to(roomId).emit("chatMessage", {
+          sender: ai.nickname,
+          content: randomMessage,
+          timestamp: new Date().toISOString(),
+          isMafiaChat: false,
+        })
+      }, Math.random() * 10000) // 0~10초 사이 랜덤 시간 후 메시지 전송
+    }
+  })
+}
+
+// 의심 지목 단계 시작 함수
+function startNominationPhase(roomId) {
+  const room = rooms.get(roomId)
+  if (!room) return
+
+  room.subPhase = "nomination" // 의심 지목 단계
+
+  // 페이즈 변경 이벤트 전송
+  io.to(roomId).emit("phaseChange", {
+    phase: "day",
+    subPhase: "nomination",
+    day: room.day,
+    timeLeft: 5, // 5초로 설정
+  })
+
+  // 시스템 메시지 전송
+  io.to(roomId).emit("systemMessage", `의심되는 플레이어를 지목해주세요. (5초)`)
+
+  // 타이머 시작 (5초)
+  startTimer(roomId, 5, () => {
+    // 시간이 다 되면 지목 결과 처리
+    processNominationResult(roomId)
+  })
+
+  // AI 플레이어 지목 투표 처리 (약간의 지연 후)
+  setTimeout(() => {
+    handleAiNominationVote(roomId)
+  }, 1000)
+}
+
+// AI 플레이어 지목 투표 처리
+function handleAiNominationVote(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || room.state !== "playing" || room.subPhase !== "nomination") return
+
+  // AI 플레이어 찾기
+  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
+  if (aiPlayers.length === 0) return
+
+  // 각 AI 플레이어에 대해 투표 처리
+  aiPlayers.forEach((ai) => {
+    // 이미 투표했으면 스킵
+    if (ai.nominationVote) return
+
+    // 투표 대상 선택 (자신 제외 생존자 중 무작위)
+    const targets = room.players.filter((p) => p.isAlive && p.nickname !== ai.nickname)
+
+    if (targets.length > 0) {
+      // 마피아 AI는 시민을 지목하려고 시도
+      let targetPool = targets
+      if (ai.role === "mafia") {
+        const citizenTargets = targets.filter((p) => p.role === "citizen")
+        if (citizenTargets.length > 0) {
+          targetPool = citizenTargets
+        }
+      }
+
+      // 무작위 타겟 선택
+      const randomTarget = targetPool[Math.floor(Math.random() * targetPool.length)]
+
+      // 지목 투표 기록
+      ai.nominationVote = randomTarget.nickname
+
+      // 지목 투표 집계 및 전송
+      const votes = {}
+      room.players.forEach((p) => {
+        if (p.isAlive && p.nominationVote) {
+          votes[p.nominationVote] = (votes[p.nominationVote] || 0) + 1
+        }
+      })
+
+      // 투표 상황 전송
+      io.to(roomId).emit("nominationVoteUpdate", votes)
+    }
+  })
+}
+
+// 지목 결과 처리 함수
+function processNominationResult(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
 
   // 투표 집계
   const votes = {}
-  room.players.forEach((player) => {
-    if (player.isAlive && player.vote) {
-      votes[player.vote] = (votes[player.vote] || 0) + 1
+  room.players.forEach((p) => {
+    if (p.isAlive && p.nominationVote) {
+      votes[p.nominationVote] = (votes[p.nominationVote] || 0) + 1
     }
   })
 
   // 최다 득표자 찾기
   let maxVotes = 0
-  let executed = null
+  let nominated = null
   let tie = false
 
   Object.entries(votes).forEach(([nickname, count]) => {
     if (count > maxVotes) {
       maxVotes = count
-      executed = nickname
+      nominated = nickname
       tie = false
     } else if (count === maxVotes) {
       tie = true
     }
   })
 
-  // 처형 처리
-  if (executed && !tie) {
-    const executedPlayer = room.players.find((p) => p.nickname === executed)
-    if (executedPlayer) {
-      executedPlayer.isAlive = false
-      io.to(roomId).emit(
-        "systemMessage",
-        `${executedPlayer.nickname}님이 처형되었습니다. ${executedPlayer.role === "mafia" ? "마피아" : "시민"}이었습니다.`,
-      )
+  // 지목 결과 처리
+  if (nominated && !tie) {
+    room.nominatedPlayer = nominated
+    io.to(roomId).emit("nominationResult", {
+      nominated,
+      votes,
+    })
+    io.to(roomId).emit("systemMessage", `${nominated}님이 최다 득표로 지목되었습니다. 최후 변론을 시작합니다.`)
 
-      // 게임 종료 조건 확인
+    // 최후 변론 단계로 전환
+    startDefensePhase(roomId)
+  } else {
+    // 동점이거나 투표가 없는 경우
+    io.to(roomId).emit("nominationResult", {
+      nominated: null,
+      votes,
+      reason: tie ? "동점으로 지목 무효" : "투표가 없어 지목 무효",
+    })
+    io.to(roomId).emit(
+      "systemMessage",
+      tie ? "동점으로 지목이 무효되었습니다. 밤이 찾아옵니다." : "투표가 없어 지목이 무효되었습니다. 밤이 찾아옵니다.",
+    )
+
+    // 밤 페이즈로 바로 전환
+    startNightPhase(roomId)
+  }
+}
+
+// 최후 변론 단계 시작 함수
+function startDefensePhase(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || !room.nominatedPlayer) return
+
+  room.subPhase = "defense" // 최후 변론 단계
+
+  // 페이즈 변경 이벤트 전송
+  io.to(roomId).emit("phaseChange", {
+    phase: "day",
+    subPhase: "defense",
+    day: room.day,
+    timeLeft: 15, // 15초로 설정
+    nominatedPlayer: room.nominatedPlayer,
+  })
+
+  // 시스템 메시지 전송
+  io.to(roomId).emit("systemMessage", `${room.nominatedPlayer}님의 최후 변론 시간입니다. (15초)`)
+
+  // 타이머 시작 (15초)
+  startTimer(roomId, 15, () => {
+    // 시간이 다 되면 처형 투표 단계로 전환
+    startExecutionVotePhase(roomId)
+  })
+
+  // 지목된 플레이어가 AI인 경우 변론 메시지 전송
+  const nominatedPlayer = room.players.find((p) => p.nickname === room.nominatedPlayer)
+  if (nominatedPlayer && nominatedPlayer.isAi) {
+    setTimeout(() => {
+      const defenseMessages = [
+        "저는 확실히 시민입니다! 저를 믿어주세요!",
+        "제가 마피아라면 이렇게 행동하지 않았을 거예요.",
+        "다른 사람을 의심해보세요. 저는 결백합니다.",
+        "투표하기 전에 잘 생각해주세요. 저는 시민입니다.",
+        "저를 처형하면 시민팀에 손해입니다.",
+      ]
+
+      const randomMessage = defenseMessages[Math.floor(Math.random() * defenseMessages.length)]
+
+      io.to(roomId).emit("chatMessage", {
+        sender: nominatedPlayer.nickname,
+        content: randomMessage,
+        timestamp: new Date().toISOString(),
+        isMafiaChat: false,
+      })
+    }, 2000) // 2초 후 변론 메시지 전송
+  }
+}
+
+// 처형 투표 단계 시작 함수
+function startExecutionVotePhase(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || !room.nominatedPlayer) return
+
+  room.subPhase = "execution" // 처형 투표 단계
+
+  // 페이즈 변경 이벤트 전송
+  io.to(roomId).emit("phaseChange", {
+    phase: "day",
+    subPhase: "execution",
+    day: room.day,
+    timeLeft: 3, // 3초로 설정
+    nominatedPlayer: room.nominatedPlayer,
+  })
+
+  // 시스템 메시지 전송
+  io.to(roomId).emit("systemMessage", `${room.nominatedPlayer}님을 처형할지 투표해주세요. (3초)`)
+
+  // 타이머 시작 (3초)
+  startTimer(roomId, 3, () => {
+    // 시간이 다 되면 처형 결과 처리
+    processExecutionResult(roomId)
+  })
+
+  // AI 플레이어 처형 투표 처리 (약간의 지연 후)
+  setTimeout(() => {
+    handleAiExecutionVote(roomId)
+  }, 1000)
+}
+
+// AI 플레이어 처형 투표 처리
+function handleAiExecutionVote(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || room.state !== "playing" || room.subPhase !== "execution" || !room.nominatedPlayer) return
+
+  // AI 플레이어 찾기
+  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
+  if (aiPlayers.length === 0) return
+
+  // 지목된 플레이어
+  const nominatedPlayer = room.players.find((p) => p.nickname === room.nominatedPlayer)
+  if (!nominatedPlayer) return
+
+  // 각 AI 플레이어에 대해 투표 처리
+  aiPlayers.forEach((ai) => {
+    // 이미 투표했으면 스킵
+    if (ai.executionVote) return
+
+    // 자신이 지목된 경우 반대 투표
+    if (ai.nickname === room.nominatedPlayer) {
+      ai.executionVote = "no"
+    }
+    // 마피아 AI의 경우
+    else if (ai.role === "mafia") {
+      // 지목된 플레이어가 마피아면 반대, 시민이면 찬성
+      ai.executionVote = nominatedPlayer.role === "mafia" ? "no" : "yes"
+    }
+    // 시민 AI의 경우
+    else {
+      // 랜덤하게 투표 (약간 찬성 쪽으로 치우침)
+      ai.executionVote = Math.random() < 0.6 ? "yes" : "no"
+    }
+
+    // 투표 집계 및 전송
+    const yesVotes = room.players.filter((p) => p.isAlive && p.executionVote === "yes").length
+    const noVotes = room.players.filter((p) => p.isAlive && p.executionVote === "no").length
+
+    // 투표 상황 전송
+    io.to(roomId).emit("executionVoteUpdate", { yes: yesVotes, no: noVotes })
+  })
+}
+
+// 처형 결과 처리 함수
+function processExecutionResult(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || !room.nominatedPlayer) return
+
+  room.subPhase = "result" // 결과 표시 단계
+
+  // 투표 집계
+  const yesVotes = room.players.filter((p) => p.isAlive && p.executionVote === "yes").length
+  const noVotes = room.players.filter((p) => p.isAlive && p.executionVote === "no").length
+  const totalVotes = yesVotes + noVotes
+
+  // 과반수 찬성 여부 확인
+  const executed = yesVotes > totalVotes / 2
+
+  // 처형 대상 플레이어
+  const targetPlayer = room.players.find((p) => p.nickname === room.nominatedPlayer)
+
+  // 투표 결과 객체 생성
+  const voteResult = {
+    target: room.nominatedPlayer,
+    executed,
+    votes: room.players
+      .filter((p) => p.isAlive && p.executionVote !== null)
+      .map((p) => ({
+        nickname: p.nickname,
+        vote: p.executionVote,
+      })),
+  }
+
+  // 처형 실행
+  if (executed && targetPlayer) {
+    targetPlayer.isAlive = false
+    voteResult.role = targetPlayer.role
+
+    // 시스템 메시지 전송
+    io.to(roomId).emit(
+      "systemMessage",
+      `${targetPlayer.nickname}님이 처형되었습니다. ${targetPlayer.role === "mafia" ? "마피아" : "시민"}이었습니다.`,
+    )
+  } else {
+    // 시스템 메시지 전송
+    io.to(roomId).emit("systemMessage", `${room.nominatedPlayer}님이 처형되지 않았습니다.`)
+  }
+
+  // 투표 결과 전송
+  io.to(roomId).emit("executionResult", voteResult)
+
+  // 페이즈 변경 이벤트 전송
+  io.to(roomId).emit("phaseChange", {
+    phase: "day",
+    subPhase: "result",
+    day: room.day,
+    timeLeft: 5, // 5초로 설정
+    voteResult,
+  })
+
+  // 타이머 시작 (5초)
+  startTimer(roomId, 5, () => {
+    // 게임 종료 조건 확인
+    if (executed) {
       const gameResult = checkGameEnd(room)
       if (gameResult) {
         endGame(roomId, gameResult)
         return
       }
     }
-  } else {
-    io.to(roomId).emit("systemMessage", "투표가 동률이거나 충분한 투표가 없어 처형이 취소되었습니다.")
-  }
 
-  // 밤 페이즈 시작
-  startNightPhase(roomId)
+    // 밤 페이즈로 전환
+    startNightPhase(roomId)
+  })
 }
 
 // 밤 페이즈 시작 함수
@@ -261,13 +572,15 @@ function startNightPhase(roomId) {
   if (!room) return
 
   room.phase = "night"
+  room.subPhase = null
   room.mafiaTarget = null
 
   // 페이즈 변경 이벤트 전송
   io.to(roomId).emit("phaseChange", {
     phase: "night",
+    subPhase: null,
     day: room.day,
-    timeLeft: 15, // 15초로 변경
+    timeLeft: 15, // 15초로 설정
   })
 
   // 시스템 메시지 전송
@@ -281,8 +594,53 @@ function startNightPhase(roomId) {
 
   // AI 플레이어 행동 처리 (약간의 지연 후)
   setTimeout(() => {
-    handleAiActions(roomId)
+    handleAiNightActions(roomId)
   }, 3000)
+}
+
+// AI 플레이어 밤 행동 처리
+function handleAiNightActions(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || room.state !== "playing" || room.phase !== "night") return
+
+  // 마피아 AI 플레이어 찾기
+  const mafiaAi = room.players.filter((p) => p.isAi && p.isAlive && p.role === "mafia")
+  if (mafiaAi.length === 0) return
+
+  // 타겟이 이미 선택되었으면 스킵
+  if (room.mafiaTarget) return
+
+  // 타겟 선택 (시민 중 무작위)
+  const targets = room.players.filter((p) => p.isAlive && p.role === "citizen")
+
+  if (targets.length > 0) {
+    // 무작위 타겟 선택
+    const randomTarget = targets[Math.floor(Math.random() * targets.length)]
+
+    // 타겟 설정
+    room.mafiaTarget = randomTarget.nickname
+
+    // 마피아 플레이어들에게 타겟 알림
+    const mafiaIds = room.players.filter((p) => p.role === "mafia" && p.isAlive).map((p) => p.id)
+
+    mafiaIds.forEach((id) => {
+      io.to(id).emit("systemMessage", `AI 마피아가 ${randomTarget.nickname}님을 타겟으로 선택했습니다.`)
+    })
+
+    // 가끔 마피아 채팅 메시지 전송
+    if (Math.random() < 0.5) {
+      const randomMessage = MAFIA_AI_CHAT_MESSAGES[Math.floor(Math.random() * MAFIA_AI_CHAT_MESSAGES.length)]
+
+      mafiaIds.forEach((id) => {
+        io.to(id).emit("chatMessage", {
+          sender: mafiaAi[0].nickname,
+          content: randomMessage,
+          timestamp: new Date().toISOString(),
+          isMafiaChat: true,
+        })
+      })
+    }
+  }
 }
 
 // 밤 페이즈 종료 함수
@@ -361,124 +719,6 @@ function endGame(roomId, winner) {
   io.to(roomId).emit("systemMessage", winnerText)
 }
 
-// AI 플레이어 행동 처리 함수
-function handleAiActions(roomId) {
-  const room = rooms.get(roomId)
-  if (!room || room.state !== "playing") return
-
-  // AI 플레이어 찾기
-  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
-  if (aiPlayers.length === 0) return
-
-  // 낮 페이즈 AI 행동
-  if (room.phase === "day") {
-    // 각 AI 플레이어에 대해
-    aiPlayers.forEach((ai) => {
-      // 이미 투표했으면 스킵
-      if (ai.vote) return
-
-      // 시민 AI는 투표, 마피아 AI는 투표하지 않음
-      if (ai.role === "citizen") {
-        // 투표 대상 선택 (마피아가 아닌 다른 생존자 중 무작위)
-        const possibleTargets = room.players.filter((p) => p.isAlive && p.id !== ai.id && p.role !== "mafia")
-
-        // 마피아가 아닌 플레이어가 없으면 아무 생존자나 선택
-        const targets =
-          possibleTargets.length > 0 ? possibleTargets : room.players.filter((p) => p.isAlive && p.id !== ai.id)
-
-        if (targets.length > 0) {
-          // 무작위 타겟 선택
-          const randomTarget = targets[Math.floor(Math.random() * targets.length)]
-
-          // 투표 기록
-          ai.vote = randomTarget.nickname
-
-          // 투표 집계
-          const votes = {}
-          room.players.forEach((p) => {
-            if (p.isAlive && p.vote) {
-              votes[p.vote] = (votes[p.vote] || 0) + 1
-            }
-          })
-
-          // 투표 상황 전송
-          io.to(roomId).emit("voteUpdate", votes)
-
-          // 시스템 메시지 전송
-          io.to(roomId).emit("systemMessage", `${ai.nickname}이(가) ${randomTarget.nickname}에게 투표했습니다.`)
-
-          // 가끔 채팅 메시지 전송
-          if (Math.random() < 0.3) {
-            const randomMessage = AI_CHAT_MESSAGES[Math.floor(Math.random() * AI_CHAT_MESSAGES.length)]
-            io.to(roomId).emit("chatMessage", {
-              sender: ai.nickname,
-              content: randomMessage,
-              timestamp: new Date().toISOString(),
-              isMafiaChat: false,
-            })
-          }
-        }
-      }
-    })
-
-    // 모든 생존자가 투표했는지 확인
-    const alivePlayers = room.players.filter((p) => p.isAlive)
-    const votedPlayers = room.players.filter((p) => p.isAlive && p.vote)
-
-    if (votedPlayers.length >= alivePlayers.length) {
-      // 모든 플레이어가 투표했으면 낮 페이즈 종료
-      clearInterval(room.timer)
-      room.timer = null
-
-      // 1초 후 낮 페이즈 종료 (UI 업데이트 시간 제공)
-      setTimeout(() => {
-        endDayPhase(roomId)
-      }, 1000)
-    }
-  }
-
-  // 밤 페이즈 AI 행동
-  else if (room.phase === "night") {
-    // 마피아 AI 플레이어 찾기
-    const mafiaAi = aiPlayers.filter((p) => p.role === "mafia")
-
-    // 마피아 AI가 있고 아직 타겟이 선택되지 않았으면
-    if (mafiaAi.length > 0 && !room.mafiaTarget) {
-      // 타겟 선택 (시민 중 무작위)
-      const targets = room.players.filter((p) => p.isAlive && p.role === "citizen")
-
-      if (targets.length > 0) {
-        // 무작위 타겟 선택
-        const randomTarget = targets[Math.floor(Math.random() * targets.length)]
-
-        // 타겟 설정
-        room.mafiaTarget = randomTarget.nickname
-
-        // 마피아 플레이어들에게 타겟 알림
-        const mafiaIds = room.players.filter((p) => p.role === "mafia" && p.isAlive).map((p) => p.id)
-
-        mafiaIds.forEach((id) => {
-          io.to(id).emit("systemMessage", `AI 마피아가 ${randomTarget.nickname}님을 타겟으로 선택했습니다.`)
-        })
-
-        // 가끔 마피아 채팅 메시지 전송
-        if (Math.random() < 0.5) {
-          const randomMessage = MAFIA_AI_CHAT_MESSAGES[Math.floor(Math.random() * MAFIA_AI_CHAT_MESSAGES.length)]
-
-          mafiaIds.forEach((id) => {
-            io.to(id).emit("chatMessage", {
-              sender: mafiaAi[0].nickname,
-              content: randomMessage,
-              timestamp: new Date().toISOString(),
-              isMafiaChat: true,
-            })
-          })
-        }
-      }
-    }
-  }
-}
-
 // Socket connection
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`)
@@ -499,8 +739,10 @@ io.on("connection", (socket) => {
         state: "waiting",
         day: 1,
         phase: "day",
+        subPhase: null,
         timeLeft: 0,
         mafiaTarget: null,
+        nominatedPlayer: null,
         timer: null,
       })
     }
@@ -531,6 +773,8 @@ io.on("connection", (socket) => {
         role: null,
         isAlive: true,
         vote: null,
+        nominationVote: null,
+        executionVote: null,
       }
 
       room.players.push(player)
@@ -556,6 +800,7 @@ io.on("connection", (socket) => {
       state: room.state,
       day: room.day,
       phase: room.phase,
+      subPhase: room.subPhase,
     })
 
     // 게임이 진행 중이면 추가 정보 전송
@@ -568,18 +813,26 @@ io.on("connection", (socket) => {
           role: playerData.role,
           day: room.day,
           phase: room.phase,
+          subPhase: room.subPhase,
         })
       }
 
       // 현재 페이즈 정보 전송
       socket.emit("phaseChange", {
         phase: room.phase,
+        subPhase: room.subPhase,
         day: room.day,
         timeLeft: room.timeLeft || 0,
+        nominatedPlayer: room.nominatedPlayer,
       })
 
       // 현재 시간 전송
       socket.emit("timeUpdate", room.timeLeft || 0)
+
+      // 현재 단계가 결과 표시 단계라면 투표 결과 전송
+      if (room.phase === "day" && room.subPhase === "result" && room.voteResult) {
+        socket.emit("executionResult", room.voteResult)
+      }
     }
   })
 
@@ -628,6 +881,8 @@ io.on("connection", (socket) => {
         role: index < mafiaCount ? "mafia" : "citizen",
         isAlive: true,
         vote: null,
+        nominationVote: null,
+        executionVote: null,
       }))
     }
 
@@ -638,8 +893,10 @@ io.on("connection", (socket) => {
     room.state = "roleReveal"
     room.day = 1
     room.phase = "day"
+    room.subPhase = null
     room.timeLeft = 0
     room.mafiaTarget = null
+    room.nominatedPlayer = null
 
     // Send role reveal to all players
     room.players.forEach((player) => {
@@ -665,6 +922,7 @@ io.on("connection", (socket) => {
         state: "playing",
         day: room.day,
         phase: room.phase,
+        subPhase: room.subPhase,
       })
 
       // 낮 페이즈 시작
@@ -690,6 +948,12 @@ io.on("connection", (socket) => {
     // 밤에는 마피아만 채팅 가능
     if (room.phase === "night" && player.role !== "mafia" && !isMafiaChat) {
       socket.emit("systemMessage", "밤에는 채팅할 수 없습니다.")
+      return
+    }
+
+    // 최후 변론 단계에서는 지목된 플레이어만 채팅 가능
+    if (room.phase === "day" && room.subPhase === "defense" && player.nickname !== room.nominatedPlayer) {
+      socket.emit("systemMessage", "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다.")
       return
     }
 
@@ -721,51 +985,96 @@ io.on("connection", (socket) => {
     }
   })
 
-  // Vote
-  socket.on("vote", ({ roomId, voter, target }) => {
+  // 의심 지목 투표
+  socket.on("submitNominationVote", ({ roomId, target }) => {
     const room = rooms.get(roomId)
-    if (!room || room.state !== "playing" || room.phase !== "day") return
+    if (!room || room.state !== "playing" || room.phase !== "day" || room.subPhase !== "nomination") return
 
     // 플레이어 확인
-    const player = room.players.find((p) => p.nickname === voter && p.isAlive)
+    const player = room.players.find((p) => p.id === socket.id && p.isAlive)
     if (!player) return
 
-    // 마피아는 낮에 투표할 수 없음
-    if (player.role === "mafia") {
-      socket.emit("systemMessage", "마피아는 낮에 투표할 수 없습니다.")
+    // 투표 대상 확인 (자기 자신은 투표 불가)
+    if (target && player.nickname === target) {
+      socket.emit("systemMessage", "자기 자신을 지목할 수 없습니다.")
       return
     }
 
-    // 투표 대상 확인
-    const targetPlayer = room.players.find((p) => p.nickname === target && p.isAlive)
-    if (!targetPlayer) return
-
-    // 투표 기록
-    player.vote = target
+    // 투표 취소 (같은 대상 다시 클릭)
+    if (player.nominationVote === target) {
+      player.nominationVote = null
+      socket.emit("systemMessage", "지목을 취소했습니다.")
+    } else {
+      // 투표 기록
+      player.nominationVote = target
+      socket.emit("systemMessage", `${target}님을 지목했습니다.`)
+    }
 
     // 투표 집계
     const votes = {}
     room.players.forEach((p) => {
-      if (p.isAlive && p.vote) {
-        votes[p.vote] = (votes[p.vote] || 0) + 1
+      if (p.isAlive && p.nominationVote) {
+        votes[p.nominationVote] = (votes[p.nominationVote] || 0) + 1
       }
     })
 
     // 투표 상황 전송
-    io.to(roomId).emit("voteUpdate", votes)
+    io.to(roomId).emit("nominationVoteUpdate", votes)
 
     // 모든 생존자가 투표했는지 확인
     const alivePlayers = room.players.filter((p) => p.isAlive)
-    const votedPlayers = room.players.filter((p) => p.isAlive && p.vote)
+    const votedPlayers = room.players.filter((p) => p.isAlive && p.nominationVote)
 
     if (votedPlayers.length >= alivePlayers.length) {
-      // 모든 플레이어가 투표했으면 낮 페이즈 종료
+      // 모든 플레이어가 투표했으면 지목 결과 처리
       clearInterval(room.timer)
       room.timer = null
 
-      // 1초 후 낮 페이즈 종료 (UI 업데이트 시간 제공)
+      // 1초 후 지목 결과 처리 (UI 업데이트 시간 제공)
       setTimeout(() => {
-        endDayPhase(roomId)
+        processNominationResult(roomId)
+      }, 1000)
+    }
+  })
+
+  // 처형 투표
+  socket.on("submitExecutionVote", ({ roomId, vote }) => {
+    const room = rooms.get(roomId)
+    if (!room || room.state !== "playing" || room.phase !== "day" || room.subPhase !== "execution") return
+
+    // 플레이어 확인
+    const player = room.players.find((p) => p.id === socket.id && p.isAlive)
+    if (!player) return
+
+    // 투표 취소 (같은 선택 다시 클릭)
+    if (player.executionVote === vote) {
+      player.executionVote = null
+      socket.emit("systemMessage", "투표를 취소했습니다.")
+    } else {
+      // 투표 기록
+      player.executionVote = vote
+      socket.emit("systemMessage", `${vote === "yes" ? "찬성" : "반대"}에 투표했습니다.`)
+    }
+
+    // 투표 집계
+    const yesVotes = room.players.filter((p) => p.isAlive && p.executionVote === "yes").length
+    const noVotes = room.players.filter((p) => p.isAlive && p.executionVote === "no").length
+
+    // 투표 상황 전송
+    io.to(roomId).emit("executionVoteUpdate", { yes: yesVotes, no: noVotes })
+
+    // 모든 생존자가 투표했는지 확인
+    const alivePlayers = room.players.filter((p) => p.isAlive)
+    const votedPlayers = room.players.filter((p) => p.isAlive && p.executionVote !== null)
+
+    if (votedPlayers.length >= alivePlayers.length) {
+      // 모든 플레이어가 투표했으면 처형 결과 처리
+      clearInterval(room.timer)
+      room.timer = null
+
+      // 1초 후 처형 결과 처리 (UI 업데이트 시간 제공)
+      setTimeout(() => {
+        processExecutionResult(roomId)
       }, 1000)
     }
   })
@@ -813,8 +1122,10 @@ io.on("connection", (socket) => {
     room.state = "waiting"
     room.day = 1
     room.phase = "day"
+    room.subPhase = null
     room.timeLeft = 0
     room.mafiaTarget = null
+    room.nominatedPlayer = null
 
     if (room.timer) {
       clearInterval(room.timer)
@@ -827,6 +1138,8 @@ io.on("connection", (socket) => {
       role: null,
       isAlive: true,
       vote: null,
+      nominationVote: null,
+      executionVote: null,
     }))
 
     // 게임 상태 업데이트 전송
@@ -901,6 +1214,8 @@ io.on("connection", (socket) => {
       role: null,
       isAlive: true,
       vote: null,
+      nominationVote: null,
+      executionVote: null,
       isAi: true,
     }
 
