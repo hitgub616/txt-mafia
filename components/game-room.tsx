@@ -44,7 +44,6 @@ export function GameRoom({
   const [votedFor, setVotedFor] = useState<string | null>(null)
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({})
   const [mafiaTarget, setMafiaTarget] = useState<string | null>(null)
-  const [systemMessages, setSystemMessages] = useState<string[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
   const [localTimeLeft, setLocalTimeLeft] = useState<number>(timeLeft)
 
@@ -52,7 +51,10 @@ export function GameRoom({
   const isAlive = currentPlayer?.isAlive ?? true
   const isMafia = role === "mafia"
   const canChat = isAlive && (phase === "day" || (phase === "night" && isMafia))
-  const canVote = isAlive && phase === "day" && !votedFor
+
+  // 마피아는 낮에 투표할 수 없도록 수정
+  const canVote = isAlive && phase === "day" && !votedFor && role !== "mafia"
+
   const canTarget = isAlive && phase === "night" && isMafia && !mafiaTarget
 
   // Get alive players
@@ -71,7 +73,6 @@ export function GameRoom({
       // Use offline game state
       setMessages(offlineGame.messages)
       setVoteCounts(offlineGame.voteCounts)
-      setSystemMessages(offlineGame.systemMessages)
       return
     }
 
@@ -81,7 +82,6 @@ export function GameRoom({
       }
 
       const handleSystemMessage = (message: string) => {
-        setSystemMessages((prev) => [...prev, message])
         setMessages((prev) => [
           ...prev,
           {
@@ -206,6 +206,36 @@ export function GameRoom({
     }
   }
 
+  // 연속된 메시지 그룹화를 위한 함수
+  const groupMessages = (messages: ChatMessage[]) => {
+    const filteredMessages = messages.filter((msg) => {
+      if (msg.isSystem) return true
+      if (phase === "day") return !msg.isMafiaChat
+      if (phase === "night" && isMafia) return msg.isMafiaChat
+      return false
+    })
+
+    const groupedMessages: { messages: ChatMessage[]; sender: string; isSystem: boolean }[] = []
+
+    filteredMessages.forEach((msg, index) => {
+      // 시스템 메시지는 항상 별도 그룹
+      if (msg.isSystem) {
+        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: true })
+        return
+      }
+
+      // 이전 그룹이 없거나, 이전 그룹이 시스템 메시지이거나, 발신자가 다르면 새 그룹 생성
+      if (index === 0 || filteredMessages[index - 1].isSystem || filteredMessages[index - 1].sender !== msg.sender) {
+        groupedMessages.push({ messages: [msg], sender: msg.sender, isSystem: false })
+      } else {
+        // 이전 메시지와 같은 발신자면 기존 그룹에 추가
+        groupedMessages[groupedMessages.length - 1].messages.push(msg)
+      }
+    })
+
+    return groupedMessages
+  }
+
   return (
     <div className="flex min-h-screen flex-col p-4 theme-background">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
@@ -271,8 +301,8 @@ export function GameRoom({
                       )}
                     </div>
 
-                    {/* Vote button (day phase) */}
-                    {phase === "day" && player.isAlive && player.nickname !== nickname && isAlive && (
+                    {/* Vote button (day phase) - 마피아는 낮에 투표할 수 없음 */}
+                    {phase === "day" && player.isAlive && player.nickname !== nickname && isAlive && !isMafia && (
                       <Button
                         variant={votedFor === player.nickname ? "destructive" : "outline"}
                         size="sm"
@@ -314,24 +344,6 @@ export function GameRoom({
               )}
             </CardContent>
           </Card>
-
-          {/* System messages */}
-          <Card>
-            <CardHeader className="pb-2">
-              <h3 className="font-medium">게임 로그</h3>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[150px]">
-                <div className="space-y-2">
-                  {systemMessages.map((msg, index) => (
-                    <div key={index} className="text-sm text-muted-foreground">
-                      {msg}
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Chat area */}
@@ -353,30 +365,24 @@ export function GameRoom({
                       </div>
                     </div>
                   ) : (
-                    messages
-                      .filter((msg) => {
-                        // Filter messages based on phase and role
-                        if (msg.isSystem) return true
-                        if (phase === "day") return !msg.isMafiaChat
-                        if (phase === "night" && isMafia) return msg.isMafiaChat
-                        return false
-                      })
-                      .map((msg, index) => (
-                        <div key={index} className={`flex ${msg.isSystem ? "justify-center" : "items-start"}`}>
-                          {!msg.isSystem && (
-                            <div className="flex flex-col items-start">
-                              <div className="bg-secondary p-3 rounded-lg">
-                                <div className="text-xs text-muted-foreground mb-1">{msg.sender}</div>
-                                <div>{msg.content}</div>
-                              </div>
+                    groupMessages(messages).map((group, groupIndex) => (
+                      <div key={groupIndex} className={`flex ${group.isSystem ? "justify-center" : "items-start"}`}>
+                        {!group.isSystem ? (
+                          <div className="flex flex-col items-start">
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground mb-1">{group.sender}</div>
+                              {group.messages.map((msg, msgIndex) => (
+                                <div key={msgIndex} className="bg-secondary p-3 rounded-lg mb-1">
+                                  {msg.content}
+                                </div>
+                              ))}
                             </div>
-                          )}
-
-                          {msg.isSystem && (
-                            <div className="bg-muted/50 px-4 py-2 rounded-full text-sm">{msg.content}</div>
-                          )}
-                        </div>
-                      ))
+                          </div>
+                        ) : (
+                          <div className="bg-muted/50 px-4 py-2 rounded-full text-sm">{group.messages[0].content}</div>
+                        )}
+                      </div>
+                    ))
                   )}
                   <div ref={chatEndRef} />
                 </div>

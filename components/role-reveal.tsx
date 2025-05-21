@@ -25,7 +25,7 @@ export function RoleReveal({ role }: RoleRevealProps) {
   }, [])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gradient-to-b from-gray-900 to-black">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
       <Card className="w-full max-w-md text-center p-8">
         <CardContent className="pt-6">
           <h2 className="text-2xl font-bold mb-6">당신의 역할은</h2>

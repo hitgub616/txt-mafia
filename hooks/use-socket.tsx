@@ -10,24 +10,14 @@ export function useSocket(roomId: string) {
   const [error, setError] = useState<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
-  // Check if we're in offline mode
-  const isOfflineMode =
-    (typeof window !== "undefined" && roomId.startsWith("offline-")) || sessionStorage.getItem("offlineMode") === "true"
-
   useEffect(() => {
-    // If in offline mode, don't attempt to connect
-    if (isOfflineMode) {
-      console.log("Offline mode detected - skipping Socket.IO connection")
-      setIsConnected(true) // Simulate connected state
-      return () => {} // Empty cleanup function
-    }
-
     // Reset error state
     setError(null)
 
     // Determine the correct Socket.IO URL based on the environment
     const socketUrl =
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
         ? `http://${window.location.hostname}:3001` // Use port 3001 for local development
         : CLIENT_CONFIG.PUBLIC_SOCKET_URL // Use configured URL in production
 
@@ -78,29 +68,7 @@ export function useSocket(roomId: string) {
       socketInstance.disconnect()
       socketRef.current = null
     }
-  }, [roomId, isOfflineMode])
-
-  // For offline mode, return a mock socket
-  if (isOfflineMode) {
-    return {
-      socket: {
-        emit: (event: string, data: any) => {
-          console.log(`[Offline Mode] Emitting event: ${event}`, data)
-          return true
-        },
-        on: (event: string, callback: Function) => {
-          console.log(`[Offline Mode] Registered listener for event: ${event}`)
-          return () => {}
-        },
-        off: (event: string) => {
-          console.log(`[Offline Mode] Removed listener for event: ${event}`)
-          return true
-        },
-      } as unknown as Socket,
-      isConnected: true,
-      error: null,
-    }
-  }
+  }, [roomId])
 
   return {
     socket,

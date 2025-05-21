@@ -75,6 +75,51 @@ const io = new Server(server, {
 // Game state
 const rooms = new Map()
 
+// AI 플레이어 이름 목록
+const AI_NAMES = [
+  "철수",
+  "영희",
+  "민수",
+  "지영",
+  "준호",
+  "미나",
+  "태호",
+  "수진",
+  "현우",
+  "서연",
+  "지훈",
+  "유진",
+  "민준",
+  "소연",
+  "재현",
+  "지은",
+  "도윤",
+  "하은",
+]
+
+// AI 플레이어 채팅 메시지 목록
+const AI_CHAT_MESSAGES = [
+  "저는 확실히 시민입니다.",
+  "이번 라운드에서는 조용히 지켜보겠습니다.",
+  "누가 의심스러운 행동을 하고 있나요?",
+  "아무도 의심되지 않네요.",
+  "투표를 신중하게 해주세요.",
+  "마피아는 누구일까요?",
+  "어제 밤에 누가 죽었죠?",
+  "저를 믿어주세요, 저는 시민입니다.",
+  "마피아라면 그렇게 말하지 않을 것 같아요.",
+  "이 사람이 의심스럽네요.",
+]
+
+// 마피아 AI 채팅 메시지 목록
+const MAFIA_AI_CHAT_MESSAGES = [
+  "저는 시민입니다, 정말로요.",
+  "다른 사람을 의심해보세요.",
+  "저를 믿어주세요.",
+  "증거 없이 의심하지 마세요.",
+  "우리 모두 침착하게 생각해봅시다.",
+]
+
 // 디버깅 함수: 방 정보 로깅
 function logRoomInfo(roomId) {
   const room = rooms.get(roomId)
@@ -150,6 +195,11 @@ function startDayPhase(roomId, day) {
     // 시간이 다 되면 밤 페이즈로 전환
     endDayPhase(roomId)
   })
+
+  // AI 플레이어 행동 처리 (약간의 지연 후)
+  setTimeout(() => {
+    handleAiActions(roomId)
+  }, 2000)
 }
 
 // 낮 페이즈 종료 함수
@@ -228,6 +278,11 @@ function startNightPhase(roomId) {
     // 시간이 다 되면 다음 낮 페이즈로 전환
     endNightPhase(roomId)
   })
+
+  // AI 플레이어 행동 처리 (약간의 지연 후)
+  setTimeout(() => {
+    handleAiActions(roomId)
+  }, 3000)
 }
 
 // 밤 페이즈 종료 함수
@@ -306,6 +361,124 @@ function endGame(roomId, winner) {
   io.to(roomId).emit("systemMessage", winnerText)
 }
 
+// AI 플레이어 행동 처리 함수
+function handleAiActions(roomId) {
+  const room = rooms.get(roomId)
+  if (!room || room.state !== "playing") return
+
+  // AI 플레이어 찾기
+  const aiPlayers = room.players.filter((p) => p.isAi && p.isAlive)
+  if (aiPlayers.length === 0) return
+
+  // 낮 페이즈 AI 행동
+  if (room.phase === "day") {
+    // 각 AI 플레이어에 대해
+    aiPlayers.forEach((ai) => {
+      // 이미 투표했으면 스킵
+      if (ai.vote) return
+
+      // 시민 AI는 투표, 마피아 AI는 투표하지 않음
+      if (ai.role === "citizen") {
+        // 투표 대상 선택 (마피아가 아닌 다른 생존자 중 무작위)
+        const possibleTargets = room.players.filter((p) => p.isAlive && p.id !== ai.id && p.role !== "mafia")
+
+        // 마피아가 아닌 플레이어가 없으면 아무 생존자나 선택
+        const targets =
+          possibleTargets.length > 0 ? possibleTargets : room.players.filter((p) => p.isAlive && p.id !== ai.id)
+
+        if (targets.length > 0) {
+          // 무작위 타겟 선택
+          const randomTarget = targets[Math.floor(Math.random() * targets.length)]
+
+          // 투표 기록
+          ai.vote = randomTarget.nickname
+
+          // 투표 집계
+          const votes = {}
+          room.players.forEach((p) => {
+            if (p.isAlive && p.vote) {
+              votes[p.vote] = (votes[p.vote] || 0) + 1
+            }
+          })
+
+          // 투표 상황 전송
+          io.to(roomId).emit("voteUpdate", votes)
+
+          // 시스템 메시지 전송
+          io.to(roomId).emit("systemMessage", `${ai.nickname}이(가) ${randomTarget.nickname}에게 투표했습니다.`)
+
+          // 가끔 채팅 메시지 전송
+          if (Math.random() < 0.3) {
+            const randomMessage = AI_CHAT_MESSAGES[Math.floor(Math.random() * AI_CHAT_MESSAGES.length)]
+            io.to(roomId).emit("chatMessage", {
+              sender: ai.nickname,
+              content: randomMessage,
+              timestamp: new Date().toISOString(),
+              isMafiaChat: false,
+            })
+          }
+        }
+      }
+    })
+
+    // 모든 생존자가 투표했는지 확인
+    const alivePlayers = room.players.filter((p) => p.isAlive)
+    const votedPlayers = room.players.filter((p) => p.isAlive && p.vote)
+
+    if (votedPlayers.length >= alivePlayers.length) {
+      // 모든 플레이어가 투표했으면 낮 페이즈 종료
+      clearInterval(room.timer)
+      room.timer = null
+
+      // 1초 후 낮 페이즈 종료 (UI 업데이트 시간 제공)
+      setTimeout(() => {
+        endDayPhase(roomId)
+      }, 1000)
+    }
+  }
+
+  // 밤 페이즈 AI 행동
+  else if (room.phase === "night") {
+    // 마피아 AI 플레이어 찾기
+    const mafiaAi = aiPlayers.filter((p) => p.role === "mafia")
+
+    // 마피아 AI가 있고 아직 타겟이 선택되지 않았으면
+    if (mafiaAi.length > 0 && !room.mafiaTarget) {
+      // 타겟 선택 (시민 중 무작위)
+      const targets = room.players.filter((p) => p.isAlive && p.role === "citizen")
+
+      if (targets.length > 0) {
+        // 무작위 타겟 선택
+        const randomTarget = targets[Math.floor(Math.random() * targets.length)]
+
+        // 타겟 설정
+        room.mafiaTarget = randomTarget.nickname
+
+        // 마피아 플레이어들에게 타겟 알림
+        const mafiaIds = room.players.filter((p) => p.role === "mafia" && p.isAlive).map((p) => p.id)
+
+        mafiaIds.forEach((id) => {
+          io.to(id).emit("systemMessage", `AI 마피아가 ${randomTarget.nickname}님을 타겟으로 선택했습니다.`)
+        })
+
+        // 가끔 마피아 채팅 메시지 전송
+        if (Math.random() < 0.5) {
+          const randomMessage = MAFIA_AI_CHAT_MESSAGES[Math.floor(Math.random() * MAFIA_AI_CHAT_MESSAGES.length)]
+
+          mafiaIds.forEach((id) => {
+            io.to(id).emit("chatMessage", {
+              sender: mafiaAi[0].nickname,
+              content: randomMessage,
+              timestamp: new Date().toISOString(),
+              isMafiaChat: true,
+            })
+          })
+        }
+      }
+    }
+  }
+}
+
 // Socket connection
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`)
@@ -374,6 +547,7 @@ io.on("connection", (socket) => {
         nickname: p.nickname,
         isHost: p.isHost,
         isAlive: p.isAlive,
+        isAi: p.isAi,
       })),
     )
 
@@ -556,6 +730,12 @@ io.on("connection", (socket) => {
     const player = room.players.find((p) => p.nickname === voter && p.isAlive)
     if (!player) return
 
+    // 마피아는 낮에 투표할 수 없음
+    if (player.role === "mafia") {
+      socket.emit("systemMessage", "마피아는 낮에 투표할 수 없습니다.")
+      return
+    }
+
     // 투표 대상 확인
     const targetPlayer = room.players.find((p) => p.nickname === target && p.isAlive)
     if (!targetPlayer) return
@@ -660,6 +840,7 @@ io.on("connection", (socket) => {
         nickname: p.nickname,
         isHost: p.isHost,
         isAlive: p.isAlive,
+        isAi: p.isAi,
       })),
     )
 
@@ -670,6 +851,145 @@ io.on("connection", (socket) => {
   // Leave room
   socket.on("leaveRoom", ({ roomId, nickname }) => {
     handlePlayerDisconnect(socket.id, roomId)
+  })
+
+  // AI 플레이어 추가
+  socket.on("addAiPlayer", ({ roomId }, callback) => {
+    const room = rooms.get(roomId)
+    if (!room) {
+      if (callback) callback({ success: false, error: "Room not found" })
+      return
+    }
+
+    // 플레이어 확인
+    const player = room.players.find((p) => p.id === socket.id)
+    if (!player || !player.isHost) {
+      socket.emit("systemMessage", "AI 플레이어를 추가할 권한이 없습니다.")
+      if (callback) callback({ success: false, error: "Not authorized" })
+      return
+    }
+
+    // 최대 인원 확인
+    if (room.players.length >= 9) {
+      socket.emit("systemMessage", "최대 인원(9명)을 초과할 수 없습니다.")
+      if (callback) callback({ success: false, error: "Room is full" })
+      return
+    }
+
+    // 이미 사용 중인 AI 이름 확인
+    const usedNames = room.players.filter((p) => p.nickname.startsWith("AI-")).map((p) => p.nickname.substring(3))
+
+    // 사용 가능한 AI 이름 찾기
+    let aiName = null
+    for (const name of AI_NAMES) {
+      if (!usedNames.includes(name)) {
+        aiName = name
+        break
+      }
+    }
+
+    // 모든 이름이 사용 중이면 숫자 붙이기
+    if (!aiName) {
+      aiName = `플레이어${Math.floor(Math.random() * 1000)}`
+    }
+
+    // AI 플레이어 추가
+    const aiPlayer = {
+      id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      nickname: `AI-${aiName}`,
+      isHost: false,
+      role: null,
+      isAlive: true,
+      vote: null,
+      isAi: true,
+    }
+
+    room.players.push(aiPlayer)
+    console.log(`AI player ${aiPlayer.nickname} added to room ${roomId}`)
+
+    // 업데이트된 플레이어 목록 전송
+    io.to(roomId).emit(
+      "playersUpdate",
+      room.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        isHost: p.isHost,
+        isAlive: p.isAlive,
+        isAi: p.isAi,
+      })),
+    )
+
+    // 시스템 메시지 전송
+    io.to(roomId).emit("systemMessage", `AI 플레이어 ${aiPlayer.nickname}이(가) 게임에 참가했습니다.`)
+
+    if (callback) callback({ success: true })
+  })
+
+  // AI 플레이어 제거
+  socket.on("removeAiPlayer", ({ roomId }, callback) => {
+    const room = rooms.get(roomId)
+    if (!room) {
+      if (callback) callback({ success: false, error: "Room not found" })
+      return
+    }
+
+    // 플레이어 확인
+    const player = room.players.find((p) => p.id === socket.id)
+    if (!player || !player.isHost) {
+      socket.emit("systemMessage", "AI 플레이어를 제거할 권한이 없습니다.")
+      if (callback) callback({ success: false, error: "Not authorized" })
+      return
+    }
+
+    // AI 플레이어 찾기
+    const aiPlayerIndex = room.players.findIndex((p) => p.isAi)
+    if (aiPlayerIndex === -1) {
+      socket.emit("systemMessage", "제거할 AI 플레이어가 없습니다.")
+      if (callback) callback({ success: false, error: "No AI player" })
+      return
+    }
+
+    // AI 플레이어 제거
+    const removedAi = room.players.splice(aiPlayerIndex, 1)[0]
+    console.log(`AI player ${removedAi.nickname} removed from room ${roomId}`)
+
+    // 업데이트된 플레이어 목록 전송
+    io.to(roomId).emit(
+      "playersUpdate",
+      room.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        isHost: p.isHost,
+        isAlive: p.isAlive,
+        isAi: p.isAi,
+      })),
+    )
+
+    // 시스템 메시지 전송
+    io.to(roomId).emit("systemMessage", `AI 플레이어 ${removedAi.nickname}이(가) 게임에서 나갔습니다.`)
+
+    if (callback) callback({ success: true })
+  })
+
+  // 빠른 참가를 위한 사용 가능한 방 찾기
+  socket.on("findAvailableRoom", ({ nickname }) => {
+    console.log(`User ${nickname} is looking for an available room`)
+
+    // 참여 가능한 방 찾기 (대기 중이고 빈자리가 있는 방)
+    let availableRoom = null
+
+    for (const [roomId, room] of rooms.entries()) {
+      if (room.state === "waiting" && room.players.length < 9) {
+        availableRoom = roomId
+        break
+      }
+    }
+
+    // 결과 전송
+    socket.emit("availableRoom", {
+      found: !!availableRoom,
+      roomId: availableRoom,
+    })
   })
 
   // Disconnect
@@ -739,6 +1059,7 @@ function handlePlayerDisconnect(socketId, roomId) {
       nickname: p.nickname,
       isHost: p.isHost,
       isAlive: p.isAlive,
+      isAi: p.isAi,
     })),
   )
 }
@@ -747,15 +1068,15 @@ function handlePlayerDisconnect(socketId, roomId) {
 server.listen(PORT, () => {
   console.log(`
 ========================================
-  Mafia Game Server
+ Mafia Game Server
 ========================================
-  Server running on port: ${PORT}
-  Environment: ${isDev ? "Development" : "Production"}
-  CORS: All origins allowed
-  
-  Local URL: http://localhost:${PORT}
-  Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
-  Client URL: ${CLIENT_URL}
+ Server running on port: ${PORT}
+ Environment: ${isDev ? "Development" : "Production"}
+ CORS: All origins allowed
+ 
+ Local URL: http://localhost:${PORT}
+ Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
+ Client URL: ${CLIENT_URL}
 ========================================
-  `)
+ `)
 })
