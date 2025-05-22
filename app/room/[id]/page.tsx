@@ -58,6 +58,14 @@ export default function RoomPage() {
   // 플레이어 목록 업데이트 핸들러
   const handlePlayersUpdate = useCallback((updatedPlayers: Player[]) => {
     console.log("Received players update:", updatedPlayers)
+    // 사망자 상태 디버깅 로그 추가
+    const deadPlayers = updatedPlayers.filter((p) => !p.isAlive)
+    if (deadPlayers.length > 0) {
+      console.log(
+        "Dead players:",
+        deadPlayers.map((p) => p.nickname),
+      )
+    }
     setPlayers(updatedPlayers)
   }, [])
 
@@ -233,6 +241,18 @@ export default function RoomPage() {
       setTheme("light")
     }
   }, [gameState, phase, setTheme])
+
+  // 디버깅 로그 추가 (사망자 상태 추적)
+  useEffect(() => {
+    // 사망자 상태 변경 감지
+    const deadPlayers = players.filter((p) => !p.isAlive)
+    if (deadPlayers.length > 0) {
+      console.log(
+        "Current dead players:",
+        deadPlayers.map((p) => p.nickname),
+      )
+    }
+  }, [players])
 
   const handleRefresh = () => {
     window.location.reload()

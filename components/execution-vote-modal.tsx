@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, ThumbsUp, ThumbsDown, AlertCircle } from "lucide-react"
+import { Clock, ThumbsUp, ThumbsDown, AlertCircle, Skull } from "lucide-react"
 
 interface ExecutionVoteModalProps {
   nominatedPlayer: string
@@ -11,6 +11,7 @@ interface ExecutionVoteModalProps {
   currentPlayerNickname: string // 현재 플레이어 닉네임 추가
   onVote: (vote: "yes" | "no" | null) => void
   onClose: () => void
+  players: { nickname: string; isAlive: boolean }[]
 }
 
 export function ExecutionVoteModal({
@@ -19,6 +20,7 @@ export function ExecutionVoteModal({
   currentPlayerNickname,
   onVote,
   onClose,
+  players,
 }: ExecutionVoteModalProps) {
   const [vote, setVote] = useState<"yes" | "no" | null>(null)
   const [isVoted, setIsVoted] = useState(false)
@@ -27,8 +29,38 @@ export function ExecutionVoteModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 3 // 최대 시간 (초)
 
-  // 현재 플레이어가 지목된 플레이어인지 확인
+  // 현재 플레이어가 지목된 플레이어인지 확인 (사망자 처리 로직 강화)
   const isNominated = currentPlayerNickname === nominatedPlayer
+  const isPlayerDead = players.find((p) => p.nickname === currentPlayerNickname)?.isAlive === false
+
+  // 사망자 또는 지목된 플레이어는 투표할 수 없음
+  const canVote = !isNominated && !isPlayerDead
+
+  // 사망자 메시지 추가
+  if (isPlayerDead) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="w-full max-w-md">
+          <Card>
+            <CardHeader>
+              <CardTitle>처형 투표</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 p-4">
+                <div className="flex justify-center mb-4">
+                  <Skull className="h-16 w-16 text-red-500" />
+                </div>
+                <p className="text-center font-medium text-lg">당신은 사망한 상태입니다</p>
+                <p className="text-center text-muted-foreground">
+                  사망한 플레이어는 투표에 참여할 수 없습니다. 게임이 끝날 때까지 관전만 가능합니다.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
@@ -49,7 +81,7 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [])
+  }, [onClose])
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {
@@ -145,7 +177,7 @@ export function ExecutionVoteModal({
                     className={`h-20 vote-highlight ${vote === "yes" ? "vote-selected border-2 border-destructive" : ""} 
                       ${animateVote === "yes" ? "pulse-vote" : ""}`}
                     onClick={() => handleVoteSelect("yes")}
-                    disabled={isVoted}
+                    disabled={isVoted || !canVote}
                   >
                     <div className="flex flex-col items-center">
                       <ThumbsUp className={`h-6 w-6 mb-2 ${vote === "yes" ? "text-white" : ""}`} />
@@ -158,7 +190,7 @@ export function ExecutionVoteModal({
                     className={`h-20 vote-highlight ${vote === "no" ? "vote-selected border-2 border-primary" : ""} 
                       ${animateVote === "no" ? "pulse-vote" : ""}`}
                     onClick={() => handleVoteSelect("no")}
-                    disabled={isVoted}
+                    disabled={isVoted || !canVote}
                   >
                     <div className="flex flex-col items-center">
                       <ThumbsDown className={`h-6 w-6 mb-2 ${vote === "no" ? "text-white" : ""}`} />
@@ -177,7 +209,7 @@ export function ExecutionVoteModal({
                 </Button>
                 <Button
                   onClick={handleSubmit}
-                  disabled={isVoted}
+                  disabled={isVoted || !canVote}
                   className={isVoted ? "bg-green-500 hover:bg-green-600" : ""}
                 >
                   {isVoted ? "투표 완료" : "투표하기"}

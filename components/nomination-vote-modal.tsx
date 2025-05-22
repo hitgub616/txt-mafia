@@ -22,8 +22,24 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 5 // 최대 시간 (초)
 
-  // 투표 가능한 플레이어 목록 (자신 제외, 생존자만)
-  const votablePlayers = players.filter((player) => player.isAlive && player.nickname !== currentPlayer.nickname)
+  // 투표 가능한 플레이어 목록 (자신 제외, 생존자만) - 사망자 제외 로직 강화
+  const votablePlayers = players.filter((player) => {
+    // 자신은 제외
+    if (player.nickname === currentPlayer.nickname) return false
+
+    // 사망자는 제외 (명시적 검사 강화)
+    if (player.isAlive === false) return false
+
+    return true
+  })
+
+  // 디버깅 로그 추가
+  console.log("All players:", players)
+  console.log("Votable players:", votablePlayers)
+  console.log(
+    "Dead players:",
+    players.filter((p) => !p.isAlive).map((p) => p.nickname),
+  )
 
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {

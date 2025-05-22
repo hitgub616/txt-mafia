@@ -490,7 +490,7 @@ export function GameRoom({
     return ""
   }
 
-  // 사망자 메시지 표시
+  // 사망자 메시지 표시 함수 개선
   const renderDeadPlayerMessage = () => {
     if (isAlive) return null
 
@@ -507,6 +507,21 @@ export function GameRoom({
       </div>
     )
   }
+
+  // 의심 지목 결과 모달 표시 로직 개선
+  useEffect(() => {
+    if (nominationResult) {
+      setShowNominationResultModal(true)
+
+      // 결과 모달이 표시된 후 6초 후에 자동으로 닫히도록 설정
+      const timer = setTimeout(() => {
+        setShowNominationResultModal(false)
+        setNominationResult(null)
+      }, 6000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [nominationResult])
 
   return (
     <div className="flex min-h-screen flex-col p-4 theme-background">
@@ -593,7 +608,7 @@ export function GameRoom({
                     className={`flex items-center justify-between p-2 rounded-md ${
                       player.isAlive
                         ? "bg-secondary"
-                        : "bg-secondary/30 text-muted-foreground border border-gray-300/20 grayscale opacity-70"
+                        : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-300/20 grayscale opacity-70"
                     } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
                   >
                     <div className="flex items-center">
@@ -602,8 +617,8 @@ export function GameRoom({
                         <UserIcon className="h-4 w-4 mr-2" />
                       ) : (
                         <div className="flex items-center">
-                          <Ghost className="h-4 w-4 mr-2 text-gray-400" />
-                          <Skull className="h-4 w-4 mr-2 text-red-400" />
+                          <Ghost className="h-4 w-4 mr-1 text-red-400" />
+                          <Skull className="h-4 w-4 mr-2 text-red-500" />
                         </div>
                       )}
                       <div className={`flex flex-col ${!player.isAlive ? "opacity-70" : ""}`}>
@@ -612,7 +627,7 @@ export function GameRoom({
                           {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
                         </span>
                         {!player.isAlive && (
-                          <span className="text-xs text-red-400 dark:text-red-500 font-bold">사망</span>
+                          <span className="text-xs text-red-500 dark:text-red-400 font-bold">사망</span>
                         )}
                       </div>
                       {isMafia && player.role === "mafia" && (
@@ -621,7 +636,7 @@ export function GameRoom({
                     </div>
 
                     {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만, 살아있는 경우만) */}
-                    {phase === "night" && isMafia && isAlive && player.isAlive && player.role !== "mafia" && (
+                    {phaseState === "night" && isMafia && isAlive && player.isAlive && player.role !== "mafia" && (
                       <Button
                         variant={mafiaTarget === player.nickname ? "destructive" : "outline"}
                         size="sm"

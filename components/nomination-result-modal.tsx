@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock } from "lucide-react"
+import { Clock, CheckCircle2 } from "lucide-react"
 
 interface NominationResultModalProps {
   result: {
@@ -22,17 +22,29 @@ export function NominationResultModal({ result, timeLeft, onClose }: NominationR
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 5 // 최대 시간 (초)
 
-  // 타이머가 끝나면 자동으로 닫기
+  // 최소 표시 시간 보장 (5초)
+  const [forceDisplay, setForceDisplay] = useState(true)
+
   useEffect(() => {
-    if (timeLeft <= 0) {
+    // 5초 동안 강제 표시
+    const timer = setTimeout(() => {
+      setForceDisplay(false)
+    }, 5000)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  // 타이머가 끝나면 자동으로 닫기 (단, 최소 표시 시간 이후에만)
+  useEffect(() => {
+    if (timeLeft <= 0 && !forceDisplay) {
       handleClose()
     }
-  }, [timeLeft])
+  }, [timeLeft, forceDisplay])
 
   // 모달 클릭 이벤트 처리
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+      if (modalRef.current && !modalRef.current.contains(event.target as Node) && !forceDisplay) {
         handleClose()
       }
     }
@@ -41,7 +53,7 @@ export function NominationResultModal({ result, timeLeft, onClose }: NominationR
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [])
+  }, [forceDisplay])
 
   // 단계적으로 결과 표시
   useEffect(() => {
@@ -136,8 +148,18 @@ export function NominationResultModal({ result, timeLeft, onClose }: NominationR
                 </div>
               )}
 
+              {/* 최소 표시 시간 안내 */}
+              {forceDisplay && (
+                <div className="flex items-center justify-center text-sm text-blue-500 dark:text-blue-400 mt-2">
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  <span>결과를 확인하는 중입니다...</span>
+                </div>
+              )}
+
               {/* 타이머 */}
-              <div className="text-center text-sm text-muted-foreground">{timeLeft}초 후 자동으로 닫힙니다...</div>
+              <div className="text-center text-sm text-muted-foreground">
+                {forceDisplay ? "잠시 후 자동으로 다음 단계로 진행됩니다..." : `${timeLeft}초 후 자동으로 닫힙니다...`}
+              </div>
             </div>
           </CardContent>
         </Card>

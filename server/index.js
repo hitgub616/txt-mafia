@@ -317,7 +317,7 @@ function handleAiNominationVote(roomId) {
   })
 }
 
-// 지목 결과 처리 함수 수정
+// 지목 결과 처리 함수 수정 - 결과 공시 후 지연 추가
 function processNominationResult(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -372,8 +372,10 @@ function processNominationResult(roomId) {
 
     io.to(roomId).emit("systemMessage", `${nominated}님이 최다 득표로 지목되었습니다. 최후 변론을 시작합니다.`)
 
-    // 최후 변론 단계로 전환
-    startDefensePhase(roomId)
+    // 중요 변경: 결과 공시 후 6초 지연을 두고 최후 변론 단계로 전환
+    setTimeout(() => {
+      startDefensePhase(roomId)
+    }, 6000) // 6초 지연
   } else {
     // 동점이거나 투표가 없는 경우
     const reason = tie ? "동점으로 지목 무효" : "투표가 없어 지목 무효"
@@ -392,8 +394,10 @@ function processNominationResult(roomId) {
       tie ? "동점으로 지목이 무효되었습니다. 밤이 찾아옵니다." : "투표가 없어 지목이 무효되었습니다. 밤이 찾아옵니다.",
     )
 
-    // 밤 페이즈로 바로 전환
-    startNightPhase(roomId)
+    // 중요 변경: 결과 공시 후 6초 지연을 두고 밤 페이즈로 전환
+    setTimeout(() => {
+      startNightPhase(roomId)
+    }, 6000) // 6초 지연
   }
 }
 
@@ -520,7 +524,7 @@ function handleAiExecutionVote(roomId) {
   })
 }
 
-// 처형 결과 처리 함수 수정
+// 처형 결과 처리 함수 수정 - 사망자 상태 전파 확인
 function processExecutionResult(roomId) {
   const room = rooms.get(roomId)
   if (!room || !room.nominatedPlayer) return
@@ -556,7 +560,7 @@ function processExecutionResult(roomId) {
 
   // 처형 실행
   if (executed && targetPlayer) {
-    targetPlayer.isAlive = false
+    targetPlayer.isAlive = false // 플레이어 사망 처리
     voteResult.role = targetPlayer.role
     voteResult.isInnocent = targetPlayer.role === "citizen" // 무고한 시민 여부 추가
 
@@ -564,6 +568,18 @@ function processExecutionResult(roomId) {
     io.to(roomId).emit(
       "systemMessage",
       `${targetPlayer.nickname}님이 처형되었습니다. ${targetPlayer.role === "mafia" ? "마피아" : "시민"}이었습니다.`,
+    )
+
+    // 중요: 플레이어 상태 업데이트 이벤트 명시적 전송 (사망 상태 전파)
+    io.to(roomId).emit(
+      "playersUpdate",
+      room.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        isHost: p.isHost,
+        isAlive: p.isAlive, // 사망 상태 포함
+        isAi: p.isAi,
+      })),
     )
   } else {
     // 시스템 메시지 전송
@@ -677,7 +693,7 @@ function handleAiNightActions(roomId) {
   }
 }
 
-// 밤 페이즈 종료 함수
+// 밤 페이즈 종료 함수 수정 - 사망자 상태 전파 확인
 function endNightPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -686,8 +702,20 @@ function endNightPhase(roomId) {
   if (room.mafiaTarget) {
     const targetPlayer = room.players.find((p) => p.nickname === room.mafiaTarget)
     if (targetPlayer && targetPlayer.isAlive) {
-      targetPlayer.isAlive = false
+      targetPlayer.isAlive = false // 플레이어 사망 처리
       io.to(roomId).emit("systemMessage", `${room.day}일차 밤, 마피아가 ${targetPlayer.nickname}님을 제거했습니다.`)
+
+      // 중요: 플레이어 상태 업데이트 이벤트 명시적 전송 (사망 상태 전파)
+      io.to(roomId).emit(
+        "playersUpdate",
+        room.players.map((p) => ({
+          id: p.id,
+          nickname: p.nickname,
+          isHost: p.isHost,
+          isAlive: p.isAlive, // 사망 상태 포함
+          isAi: p.isAi,
+        })),
+      )
 
       // 게임 종료 조건 확인
       const gameResult = checkGameEnd(room)
