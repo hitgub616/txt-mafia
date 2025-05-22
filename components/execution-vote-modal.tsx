@@ -56,11 +56,15 @@ export function ExecutionVoteModal({
     }
   }, [timeLeft, isVoted, isNominated])
 
-  // 모달 클릭 이벤트 처리
+  // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        handleClose()
+        // 투표가 완료되었거나 타이머가 0이 된 경우에만 닫기 허용
+        if (isVoted || timeLeft <= 0 || isNominated) {
+          handleClose()
+        }
+        // 그 외의 경우 무시 (외부 클릭 방지)
       }
     }
 
@@ -68,7 +72,7 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [])
+  }, [isVoted, timeLeft, isNominated])
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {
@@ -132,6 +136,8 @@ export function ExecutionVoteModal({
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
+      // 배경 클릭 이벤트 방지 (이벤트 버블링 차단)
+      onClick={(e) => e.stopPropagation()}
     >
       <div ref={modalRef} className={`w-full max-w-md ${isExiting ? "modal-exit" : "modal-enter"}`}>
         <Card>
@@ -209,7 +215,7 @@ export function ExecutionVoteModal({
           <CardFooter className="flex justify-between">
             {!isNominated && (
               <>
-                <Button variant="ghost" onClick={handleClose} disabled={isVoted}>
+                <Button variant="ghost" onClick={handleClose} disabled={isVoted || timeLeft > 0}>
                   취소
                 </Button>
                 <Button

@@ -17,6 +17,7 @@ import { ExecutionVoteModal } from "./execution-vote-modal"
 import { VoteResultPopup } from "./vote-result-popup"
 import { NominationResultModal } from "./nomination-result-modal"
 import { PhaseTransitionModal } from "./phase-transition-modal"
+import { MafiaTargetModal } from "./mafia-target-modal"
 import { toast } from "sonner"
 
 interface GameRoomProps {
@@ -66,6 +67,7 @@ export function GameRoom({
   const [showVoteResultPopup, setShowVoteResultPopup] = useState(false)
   const [showNominationResultModal, setShowNominationResultModal] = useState(false)
   const [showPhaseTransitionModal, setShowPhaseTransitionModal] = useState(false)
+  const [showMafiaTargetModal, setShowMafiaTargetModal] = useState(false)
   const [localVoteResult, setLocalVoteResult] = useState<VoteResult | null>(null)
   const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
   const [phaseTransitionInfo, setPhaseTransitionInfo] = useState<{
@@ -197,6 +199,11 @@ export function GameRoom({
           className:
             "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900 dark:border-blue-800 dark:text-blue-100",
         })
+
+        // 마피아인 경우 타겟 선택 모달 표시
+        if (isMafia && isAlive) {
+          setShowMafiaTargetModal(true)
+        }
       } else if (phaseState === "day") {
         // 낮 서브페이즈 변경 알림
         if (subPhaseState === "discussion" && prevSubPhase !== "discussion") {
@@ -240,7 +247,7 @@ export function GameRoom({
         }
       }
     }
-  }, [phaseState, subPhaseState, prevPhase, prevSubPhase, dayState, isMafia, nickname, nominatedPlayerState])
+  }, [phaseState, subPhaseState, prevPhase, prevSubPhase, dayState, isMafia, nickname, nominatedPlayerState, isAlive])
 
   // 서브페이즈 변경 감지 및 모달 표시
   useEffect(() => {
@@ -396,7 +403,7 @@ export function GameRoom({
     })
   }
 
-  const handleMafiaTarget = (targetNickname: string) => {
+  const handleMafiaTarget = (targetNickname: string | null) => {
     if (!isMafia || !isAlive) return
 
     if (isOfflineMode && offlineGame) {
@@ -409,6 +416,9 @@ export function GameRoom({
       })
       setMafiaTarget(targetNickname)
     }
+
+    // 타겟 선택 후 모달 닫기
+    setShowMafiaTargetModal(false)
   }
 
   const handleLeaveRoom = () => {
@@ -759,6 +769,18 @@ export function GameRoom({
           onVote={handleExecutionVote}
           onClose={() => setShowExecutionModal(false)}
           players={players} // players prop 명시적으로 전달
+        />
+      )}
+
+      {/* 마피아 타겟 선택 모달 */}
+      {showMafiaTargetModal && isMafia && isAlive && phaseState === "night" && (
+        <MafiaTargetModal
+          players={players}
+          currentPlayerNickname={nickname}
+          timeLeft={localTimeLeft}
+          onTarget={handleMafiaTarget}
+          onClose={() => setShowMafiaTargetModal(false)}
+          selectedTarget={mafiaTarget}
         />
       )}
 

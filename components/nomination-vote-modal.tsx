@@ -48,11 +48,16 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
     }
   }, [timeLeft])
 
-  // 모달 진입 애니메이션
+  // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      // 투표 중에는 외부 클릭으로 모달이 닫히지 않도록 수정
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        handleClose()
+        // 투표가 완료되었거나 타이머가 0이 된 경우에만 닫기 허용
+        if (isVoted || timeLeft <= 0) {
+          handleClose()
+        }
+        // 그 외의 경우 무시 (외부 클릭 방지)
       }
     }
 
@@ -60,7 +65,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [])
+  }, [isVoted, timeLeft])
 
   // 플레이어 선택 처리
   const handlePlayerSelect = (nickname: string) => {
@@ -106,6 +111,8 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
+      // 배경 클릭 이벤트 방지 (이벤트 버블링 차단)
+      onClick={(e) => e.stopPropagation()}
     >
       <div ref={modalRef} className={`w-full max-w-md ${isExiting ? "modal-exit" : "modal-enter"}`}>
         <Card>
@@ -165,7 +172,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
             </div>
           </CardContent>
           <CardFooter className="flex justify-between">
-            <Button variant="ghost" onClick={handleClose} disabled={isVoted}>
+            <Button variant="ghost" onClick={handleClose} disabled={isVoted || timeLeft > 0}>
               취소
             </Button>
             <Button

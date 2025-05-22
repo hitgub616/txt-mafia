@@ -1405,9 +1405,10 @@ function handlePlayerDisconnect(socketId, roomId) {
     // Remove player from room
     room.players.splice(playerIndex, 1)
 
-    // If room is empty, delete it
-    if (room.players.length === 0) {
-      console.log(`Room ${roomId} is empty, deleting it`)
+    // 수정: 실제 플레이어가 모두 나가고 AI만 남은 경우 방 삭제
+    const hasRealPlayers = room.players.some((p) => !p.isAi)
+    if (!hasRealPlayers || room.players.length === 0) {
+      console.log(`Room ${roomId} has no real players or is empty, deleting it`)
 
       // 타이머가 있으면 정리
       if (room.timer) {
@@ -1420,8 +1421,16 @@ function handlePlayerDisconnect(socketId, roomId) {
 
     // If host left, assign new host
     if (player.isHost && room.players.length > 0) {
-      console.log(`Host ${player.nickname} left, assigning new host: ${room.players[0].nickname}`)
-      room.players[0].isHost = true
+      // 실제 플레이어 중에서 새 호스트 찾기
+      const newHostIndex = room.players.findIndex((p) => !p.isAi)
+      if (newHostIndex !== -1) {
+        console.log(`Host ${player.nickname} left, assigning new host: ${room.players[newHostIndex].nickname}`)
+        room.players[newHostIndex].isHost = true
+      } else {
+        // 모든 플레이어가 AI인 경우 첫 번째 AI를 호스트로 설정
+        console.log(`Host ${player.nickname} left, assigning AI as host: ${room.players[0].nickname}`)
+        room.players[0].isHost = true
+      }
     }
   }
 

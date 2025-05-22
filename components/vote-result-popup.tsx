@@ -102,6 +102,25 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
     )
   }
 
+  const renderMafiaSuccessMessage = () => {
+    if (result.executed && result.role === "mafia") {
+      return (
+        <div className="mt-6 p-4 bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-700 rounded-lg animate-fade-in">
+          <div className="flex items-center justify-center mb-2">
+            <AlertCircle className="h-6 w-6 text-green-500 mr-2" />
+            <span className="text-xl font-bold text-green-600 dark:text-green-300">마피아 검거 성공!</span>
+          </div>
+          <p className="text-2xl font-bold text-center text-green-700 dark:text-green-200 mb-2">정의가 승리했습니다!</p>
+          <div className="flex justify-center space-x-2 text-xl">
+            <span>🎉</span>
+            <span>🥳</span>
+          </div>
+        </div>
+      )
+    }
+    return null
+  }
+
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
@@ -166,6 +185,9 @@ export function VoteResultPopup({ result, timeLeft, onClose }: VoteResultPopupPr
 
               {/* 무고한 시민 메시지 (처형된 시민인 경우) */}
               {renderInnocentCitizenMessage()}
+
+              {/* 마피아 처형 성공 메시지 */}
+              {renderMafiaSuccessMessage()}
 
               {/* 투표 현황 */}
               {showVotes && (
