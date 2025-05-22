@@ -754,10 +754,11 @@ export function GameRoom({
       {showExecutionModal && nominatedPlayerState && (
         <ExecutionVoteModal
           nominatedPlayer={nominatedPlayerState}
-          currentPlayerNickname={nickname} // 현재 플레이어 닉네임 전달
+          currentPlayerNickname={nickname}
           timeLeft={localTimeLeft}
           onVote={handleExecutionVote}
           onClose={() => setShowExecutionModal(false)}
+          players={players} // players prop 명시적으로 전달
         />
       )}
 

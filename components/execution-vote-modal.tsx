@@ -8,10 +8,10 @@ import { Clock, ThumbsUp, ThumbsDown, AlertCircle, Skull } from "lucide-react"
 interface ExecutionVoteModalProps {
   nominatedPlayer: string
   timeLeft: number
-  currentPlayerNickname: string // 현재 플레이어 닉네임 추가
+  currentPlayerNickname: string
   onVote: (vote: "yes" | "no" | null) => void
   onClose: () => void
-  players: { nickname: string; isAlive: boolean }[]
+  players?: { nickname: string; isAlive: boolean }[] // players를 선택적으로 변경
 }
 
 export function ExecutionVoteModal({
@@ -20,7 +20,7 @@ export function ExecutionVoteModal({
   currentPlayerNickname,
   onVote,
   onClose,
-  players,
+  players = [], // 기본값으로 빈 배열 제공
 }: ExecutionVoteModalProps) {
   const [vote, setVote] = useState<"yes" | "no" | null>(null)
   const [isVoted, setIsVoted] = useState(false)
@@ -31,35 +31,22 @@ export function ExecutionVoteModal({
 
   // 현재 플레이어가 지목된 플레이어인지 확인 (사망자 처리 로직 강화)
   const isNominated = currentPlayerNickname === nominatedPlayer
-  const isPlayerDead = players.find((p) => p.nickname === currentPlayerNickname)?.isAlive === false
+
+  // 방어 코드 추가: players가 유효한 배열인지 확인 후 find 메소드 사용
+  const isPlayerDead =
+    Array.isArray(players) && players.length > 0
+      ? players.find((p) => p.nickname === currentPlayerNickname)?.isAlive === false
+      : false
 
   // 사망자 또는 지목된 플레이어는 투표할 수 없음
   const canVote = !isNominated && !isPlayerDead
 
-  // 사망자 메시지 추가
-  if (isPlayerDead) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="w-full max-w-md">
-          <Card>
-            <CardHeader>
-              <CardTitle>처형 투표</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 p-4">
-                <div className="flex justify-center mb-4">
-                  <Skull className="h-16 w-16 text-red-500" />
-                </div>
-                <p className="text-center font-medium text-lg">당신은 사망한 상태입니다</p>
-                <p className="text-center text-muted-foreground">
-                  사망한 플레이어는 투표에 참여할 수 없습니다. 게임이 끝날 때까지 관전만 가능합니다.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
+  // 모달 닫기 (애니메이션 포함)
+  const handleClose = () => {
+    setIsExiting(true)
+    setTimeout(() => {
+      onClose()
+    }, 200) // 애니메이션 시간과 일치시킴
   }
 
   // 타이머가 끝나면 자동으로 투표 처리
@@ -81,7 +68,7 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [onClose])
+  }, [])
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {
@@ -113,12 +100,30 @@ export function ExecutionVoteModal({
     }, 500)
   }
 
-  // 모달 닫기 (애니메이션 포함)
-  const handleClose = () => {
-    setIsExiting(true)
-    setTimeout(() => {
-      onClose()
-    }, 200) // 애니메이션 시간과 일치시킴
+  // 사망자 메시지 추가
+  if (isPlayerDead) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="w-full max-w-md">
+          <Card>
+            <CardHeader>
+              <CardTitle>처형 투표</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4 p-4">
+                <div className="flex justify-center mb-4">
+                  <Skull className="h-16 w-16 text-red-500" />
+                </div>
+                <p className="text-center font-medium text-lg">당신은 사망한 상태입니다</p>
+                <p className="text-center text-muted-foreground">
+                  사망한 플레이어는 투표에 참여할 수 없습니다. 게임이 끝날 때까지 관전만 가능합니다.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
   // 타이머 임계값 확인 (5초 이하)

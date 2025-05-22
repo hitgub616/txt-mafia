@@ -58,14 +58,23 @@ export default function RoomPage() {
   // 플레이어 목록 업데이트 핸들러
   const handlePlayersUpdate = useCallback((updatedPlayers: Player[]) => {
     console.log("Received players update:", updatedPlayers)
-    // 사망자 상태 디버깅 로그 추가
-    const deadPlayers = updatedPlayers.filter((p) => !p.isAlive)
-    if (deadPlayers.length > 0) {
-      console.log(
-        "Dead players:",
-        deadPlayers.map((p) => p.nickname),
-      )
+
+    // 플레이어 배열 유효성 검사 로그 추가
+    if (!updatedPlayers || !Array.isArray(updatedPlayers)) {
+      console.error("Invalid players data received:", updatedPlayers)
+    } else {
+      console.log("Valid players array received, length:", updatedPlayers.length)
+
+      // 사망자 상태 디버깅 로그
+      const deadPlayers = updatedPlayers.filter((p) => !p.isAlive)
+      if (deadPlayers.length > 0) {
+        console.log(
+          "Dead players:",
+          deadPlayers.map((p) => p.nickname),
+        )
+      }
     }
+
     setPlayers(updatedPlayers)
   }, [])
 
@@ -301,9 +310,10 @@ export default function RoomPage() {
   }
 
   if (gameState === "playing") {
+    console.log("Rendering GameRoom with players:", players)
     return (
       <GameRoom
-        players={players}
+        players={players || []} // 방어 코드 추가: players가 undefined일 경우 빈 배열 전달
         role={role}
         day={day}
         phase={phase}
