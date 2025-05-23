@@ -29,6 +29,7 @@ export function MafiaTargetModal({
   const [animateTarget, setAnimateTarget] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 15 // 최대 시간 (초)
+  const initialRender = useRef(true)
 
   // 타겟 가능한 플레이어 목록 (자신 제외, 마피아 제외, 생존자만)
   const targetablePlayers = players.filter((player) => {
@@ -46,7 +47,16 @@ export function MafiaTargetModal({
 
   // 타이머가 끝나면 자동으로 타겟 선택 처리
   useEffect(() => {
+    // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
+
+    if (initialRender.current) {
+      initialRender.current = false
+      // 초기 렌더링 시 timeLeft가 이미 0이면 무시
+      if (timeLeft <= 0) return
+    }
+
     if (timeLeft <= 0 && !isSelected) {
+      console.log("MafiaTargetModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
   }, [timeLeft])

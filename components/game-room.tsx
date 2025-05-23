@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { UserIcon, MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost, Skull } from "lucide-react"
+import { MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost, Skull } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { NominationVoteModal } from "./nomination-vote-modal"
 import { ExecutionVoteModal } from "./execution-vote-modal"
@@ -19,6 +19,7 @@ import { NominationResultModal } from "./nomination-result-modal"
 import { PhaseTransitionModal } from "./phase-transition-modal"
 import { MafiaTargetModal } from "./mafia-target-modal"
 import { toast } from "sonner"
+import { parseCharacterFromNickname } from "@/lib/character-list"
 
 interface GameRoomProps {
   players: Player[]
@@ -200,8 +201,9 @@ export function GameRoom({
             "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900 dark:border-blue-800 dark:text-blue-100",
         })
 
-        // 마피아인 경우 타겟 선택 모달 표시
-        if (isMafia && isAlive) {
+        // 마피아인 경우 타겟 선택 모달 표시 (timeLeft가 0보다 클 때만)
+        if (isMafia && isAlive && localTimeLeft > 0) {
+          console.log(`마피아 타겟 모달 표시, 남은 시간: ${localTimeLeft}초`)
           setShowMafiaTargetModal(true)
         }
       } else if (phaseState === "day") {
@@ -247,7 +249,18 @@ export function GameRoom({
         }
       }
     }
-  }, [phaseState, subPhaseState, prevPhase, prevSubPhase, dayState, isMafia, nickname, nominatedPlayerState, isAlive])
+  }, [
+    phaseState,
+    subPhaseState,
+    prevPhase,
+    prevSubPhase,
+    dayState,
+    isMafia,
+    nickname,
+    nominatedPlayerState,
+    isAlive,
+    localTimeLeft,
+  ])
 
   // 서브페이즈 변경 감지 및 모달 표시
   useEffect(() => {
@@ -259,18 +272,23 @@ export function GameRoom({
         return
       }
 
-      if (subPhaseState === "nomination") {
+      // 지목 단계에서 모달 표시 (timeLeft가 0보다 클 때만)
+      if (subPhaseState === "nomination" && localTimeLeft > 0) {
+        console.log(`지목 모달 표시, 남은 시간: ${localTimeLeft}초`)
         setShowNominationModal(true)
-      } else {
+      } else if (subPhaseState !== "nomination") {
         setShowNominationModal(false)
       }
 
-      if (subPhaseState === "execution") {
+      // 처형 투표 단계에서 모달 표시 (timeLeft가 0보다 클 때만)
+      if (subPhaseState === "execution" && localTimeLeft > 0) {
+        console.log(`처형 투표 모달 표시, 남은 시간: ${localTimeLeft}초`)
         setShowExecutionModal(true)
-      } else {
+      } else if (subPhaseState !== "execution") {
         setShowExecutionModal(false)
       }
 
+      // 결과 단계에서 결과 팝업 표시
       if (subPhaseState === "result" && voteResultState) {
         setLocalVoteResult(voteResultState)
         setShowVoteResultPopup(true)
@@ -278,14 +296,22 @@ export function GameRoom({
         setShowVoteResultPopup(false)
       }
     }
-  }, [phaseState, subPhaseState, isAlive, voteResultState])
+  }, [phaseState, subPhaseState, isAlive, voteResultState, localTimeLeft])
 
   useEffect(() => {
     // 서버에서 받은 timeLeft 값으로 localTimeLeft 업데이트
-    setLocalTimeLeft(timeLeft)
+    console.log(`서버에서 받은 timeLeft: ${timeLeft}, 현재 localTimeLeft: ${localTimeLeft}`)
 
-    // 타이머가 5초 이하로 남았을 때 임계값 상태 설정
-    setIsTimerCritical(timeLeft <= 5 && timeLeft > 0)
+    // timeLeft가 유효한 값일 때만 업데이트
+    if (typeof timeLeft === "number" && timeLeft >= 0) {
+      setLocalTimeLeft(timeLeft)
+
+      // 타이머가 5초 이하로 남았을 때 임계값 상태 설정
+      setIsTimerCritical(timeLeft <= 5 && timeLeft > 0)
+
+      // 디버깅 로그
+      console.log(`localTimeLeft 업데이트됨: ${timeLeft}초`)
+    }
   }, [timeLeft])
 
   useEffect(() => {
@@ -533,9 +559,27 @@ export function GameRoom({
     }
   }, [nominationResult])
 
+  // 캐릭터 정보 파싱 함수
+  const getPlayerDisplay = (player: Player) => {
+    const character = parseCharacterFromNickname(player.nickname)
+    if (character) {
+      return {
+        emoji: character.emoji,
+        name: character.name,
+        fullName: player.nickname,
+      }
+    }
+    return {
+      emoji: "👤",
+      name: player.nickname,
+      fullName: player.nickname,
+    }
+  }
+
   return (
-    <div className="flex min-h-screen flex-col p-4 theme-background">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+    <div className="flex min-h-screen flex-col theme-background">
+      {/* 데스크톱 레이아웃 (md 이상) */}
+      <div className="hidden md:grid md:grid-cols-3 gap-4 h-full p-4">
         {/* Game info and player list */}
         <div className="md:col-span-1 space-y-4">
           <Card>
@@ -612,52 +656,55 @@ export function GameRoom({
               </h3>
               {/* 플레이어 목록 렌더링 부분 수정 - 사망자 표시 개선 */}
               <div className="space-y-2">
-                {players.map((player) => (
-                  <div
-                    key={player.id}
-                    className={`flex items-center justify-between p-2 rounded-md ${
-                      player.isAlive
-                        ? "bg-secondary"
-                        : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-300/20 grayscale opacity-70"
-                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
-                  >
-                    <div className="flex items-center">
-                      {/* 사망자 아이콘 및 스타일 개선 */}
-                      {player.isAlive ? (
-                        <UserIcon className="h-4 w-4 mr-2" />
-                      ) : (
-                        <div className="flex items-center">
-                          <Ghost className="h-4 w-4 mr-1 text-red-400" />
-                          <Skull className="h-4 w-4 mr-2 text-red-500" />
+                {players.map((player) => {
+                  const playerDisplay = getPlayerDisplay(player)
+                  return (
+                    <div
+                      key={player.id}
+                      className={`flex items-center justify-between p-2 rounded-md ${
+                        player.isAlive
+                          ? "bg-secondary"
+                          : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-300/20 grayscale opacity-70"
+                      } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
+                    >
+                      <div className="flex items-center">
+                        {/* 사망자 아이콘 및 스타일 개선 */}
+                        {player.isAlive ? (
+                          <span className="text-lg mr-2">{playerDisplay.emoji}</span>
+                        ) : (
+                          <div className="flex items-center">
+                            <Ghost className="h-4 w-4 mr-1 text-red-400" />
+                            <Skull className="h-4 w-4 mr-2 text-red-500" />
+                          </div>
+                        )}
+                        <div className={`flex flex-col ${!player.isAlive ? "opacity-70" : ""}`}>
+                          <span className={player.isAlive ? "" : "line-through text-red-400"}>
+                            {playerDisplay.name}
+                            {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
+                          </span>
+                          {!player.isAlive && (
+                            <span className="text-xs text-red-500 dark:text-red-400 font-bold">사망</span>
+                          )}
                         </div>
-                      )}
-                      <div className={`flex flex-col ${!player.isAlive ? "opacity-70" : ""}`}>
-                        <span className={player.isAlive ? "" : "line-through text-red-400"}>
-                          {player.nickname}
-                          {player.nickname === nickname && <span className="ml-2 text-xs">(나)</span>}
-                        </span>
-                        {!player.isAlive && (
-                          <span className="text-xs text-red-500 dark:text-red-400 font-bold">사망</span>
+                        {isMafia && player.role === "mafia" && (
+                          <span className="ml-2 text-xs text-red-500">(마피아)</span>
                         )}
                       </div>
-                      {isMafia && player.role === "mafia" && (
-                        <span className="ml-2 text-xs text-red-500">(마피아)</span>
+
+                      {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만, 살아있는 경우만) */}
+                      {phaseState === "night" && isMafia && isAlive && player.isAlive && player.role !== "mafia" && (
+                        <Button
+                          variant={mafiaTarget === player.nickname ? "destructive" : "outline"}
+                          size="sm"
+                          onClick={() => handleMafiaTarget(player.nickname)}
+                          className={mafiaTarget === player.nickname ? "pulse-vote" : "vote-highlight"}
+                        >
+                          {mafiaTarget === player.nickname ? "선택됨" : "암살"}
+                        </Button>
                       )}
                     </div>
-
-                    {/* 마피아 타겟 선택 버튼 (밤 페이즈, 마피아만, 살아있는 경우만) */}
-                    {phaseState === "night" && isMafia && isAlive && player.isAlive && player.role !== "mafia" && (
-                      <Button
-                        variant={mafiaTarget === player.nickname ? "destructive" : "outline"}
-                        size="sm"
-                        onClick={() => handleMafiaTarget(player.nickname)}
-                        className={mafiaTarget === player.nickname ? "pulse-vote" : "vote-highlight"}
-                      >
-                        {mafiaTarget === player.nickname ? "선택됨" : "암살"}
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Mafia list (only visible to mafia) */}
@@ -665,12 +712,15 @@ export function GameRoom({
                 <div className="mt-4">
                   <h3 className="text-sm font-medium mb-2 text-red-500">마피아 팀</h3>
                   <div className="space-y-2">
-                    {mafiaPlayers.map((player) => (
-                      <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30">
-                        <UserIcon className="h-4 w-4 mr-2" />
-                        <span>{player.nickname}</span>
-                      </div>
-                    ))}
+                    {mafiaPlayers.map((player) => {
+                      const playerDisplay = getPlayerDisplay(player)
+                      return (
+                        <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30">
+                          <span className="text-lg mr-2">{playerDisplay.emoji}</span>
+                          <span>{playerDisplay.name}</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -688,7 +738,7 @@ export function GameRoom({
             </CardHeader>
             <CardContent className="flex-grow overflow-hidden">
               <ScrollArea className="h-[calc(100vh-300px)]">
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {phaseState === "night" && !isMafia ? (
                     <div className="flex items-center justify-center h-[calc(100vh-400px)]">
                       <div className="text-center">
@@ -700,14 +750,19 @@ export function GameRoom({
                     groupMessages(messages).map((group, groupIndex) => (
                       <div key={groupIndex} className={`flex ${group.isSystem ? "justify-center" : "items-start"}`}>
                         {!group.isSystem ? (
-                          <div className="flex flex-col items-start">
-                            <div className="space-y-1">
-                              <div className="text-xs text-muted-foreground mb-1">{group.sender}</div>
-                              {group.messages.map((msg, msgIndex) => (
-                                <div key={msgIndex} className="bg-secondary p-3 rounded-lg mb-1">
-                                  {msg.content}
-                                </div>
-                              ))}
+                          <div className="flex flex-col items-start w-full">
+                            <div className="space-y-1 w-full">
+                              {group.messages.map((msg, msgIndex) => {
+                                const senderDisplay = parseCharacterFromNickname(msg.sender)
+                                return (
+                                  <div key={msgIndex} className="text-sm leading-relaxed">
+                                    <span className="font-bold text-primary">
+                                      {senderDisplay ? `${senderDisplay.emoji} ${senderDisplay.name}` : msg.sender}:
+                                    </span>{" "}
+                                    <span>{msg.content}</span>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </div>
                         ) : (
@@ -749,7 +804,175 @@ export function GameRoom({
         </div>
       </div>
 
-      {/* 의심 지목 투표 모달 */}
+      {/* 모바일 레이아웃 (md 미만) */}
+      <div className="md:hidden flex flex-col h-screen">
+        {/* 상단 고정 정보 영역 */}
+        <div className="bg-background border-b border-border p-3 space-y-2">
+          {/* 페이즈 및 타이머 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              {phaseState === "day" ? (
+                <SunIcon className="h-4 w-4 mr-2 text-yellow-500" />
+              ) : (
+                <MoonIcon className="h-4 w-4 mr-2 text-blue-500" />
+              )}
+              <span className="font-bold text-sm">
+                {dayState}일차 {phaseState === "day" ? "낮" : "밤"}
+                {subPhaseState &&
+                  phaseState === "day" &&
+                  ` (${
+                    subPhaseState === "discussion"
+                      ? "토론"
+                      : subPhaseState === "nomination"
+                        ? "지목"
+                        : subPhaseState === "defense"
+                          ? "변론"
+                          : subPhaseState === "execution"
+                            ? "투표"
+                            : "결과"
+                  })`}
+              </span>
+            </div>
+
+            <div
+              className={`flex items-center px-2 py-1 rounded-full text-xs ${
+                isTimerCritical
+                  ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse"
+                  : "bg-secondary/50"
+              }`}
+            >
+              <Clock className={`h-3 w-3 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
+              <span className={`font-mono ${isTimerCritical ? "font-bold" : ""}`}>
+                {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
+              </span>
+            </div>
+          </div>
+
+          {/* 내 역할 및 상태 */}
+          <div className="flex justify-between items-center text-xs">
+            <div>
+              <span className="text-muted-foreground">내 역할: </span>
+              <span className={role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"}>
+                {role === "mafia" ? "마피아" : "시민"}
+              </span>
+              {!isAlive && <span className="ml-1 text-red-500">(사망)</span>}
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleLeaveRoom} className="h-6 px-2 text-xs text-red-500">
+              <LogOut className="h-3 w-3 mr-1" />
+              나가기
+            </Button>
+          </div>
+
+          {/* 지목된 플레이어 표시 */}
+          {nominatedPlayerState && (
+            <div className="text-xs text-center bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded-md">
+              <span className="font-medium">
+                지목된 플레이어: {parseCharacterFromNickname(nominatedPlayerState)?.name || nominatedPlayerState}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* 플레이어 목록 (가로 스크롤) */}
+        <div className="bg-background border-b border-border p-2">
+          <div className="flex space-x-2 overflow-x-auto pb-1">
+            {players.map((player) => {
+              const playerDisplay = getPlayerDisplay(player)
+              return (
+                <div
+                  key={player.id}
+                  className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg min-w-[60px] ${
+                    player.isAlive ? "bg-secondary" : "bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50"
+                  } ${player.nickname === nickname ? "ring-2 ring-primary" : ""}`}
+                >
+                  <div className="relative">
+                    <span className={`text-lg ${!player.isAlive ? "grayscale" : ""}`}>{playerDisplay.emoji}</span>
+                    {!player.isAlive && <Skull className="absolute -top-1 -right-1 h-3 w-3 text-red-500" />}
+                    {isMafia && player.role === "mafia" && player.isAlive && (
+                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
+                    )}
+                  </div>
+                  <span className={`text-xs text-center mt-1 ${!player.isAlive ? "line-through text-red-400" : ""}`}>
+                    {playerDisplay.name}
+                  </span>
+                  {player.nickname === nickname && <span className="text-xs text-primary font-bold">나</span>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* 채팅 영역 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full p-3">
+              <div className="space-y-1">
+                {phaseState === "night" && !isMafia ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <MoonIcon className="h-8 w-8 mx-auto mb-2 text-blue-500" />
+                      <p className="text-sm">밤입니다. 마피아의 행동을 기다리는 중입니다.</p>
+                    </div>
+                  </div>
+                ) : (
+                  groupMessages(messages).map((group, groupIndex) => (
+                    <div key={groupIndex} className={`${group.isSystem ? "text-center" : ""}`}>
+                      {!group.isSystem ? (
+                        <div className="space-y-0.5">
+                          {group.messages.map((msg, msgIndex) => {
+                            const senderDisplay = parseCharacterFromNickname(msg.sender)
+                            return (
+                              <div key={msgIndex} className="text-sm leading-relaxed">
+                                <span className="font-bold text-primary">
+                                  {senderDisplay ? `${senderDisplay.emoji} ${senderDisplay.name}` : msg.sender}:
+                                </span>{" "}
+                                <span>{msg.content}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        // 시스템 메시지 모바일 스타일
+                        <div className="bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full text-xs flex items-center justify-center text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800/50 my-1 mx-4">
+                          <Info className="h-3 w-3 mr-1 text-blue-500" />
+                          {group.messages[0].content}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* 채팅 입력창 (하단 고정) */}
+          <div className="border-t border-border p-3 bg-background">
+            <form onSubmit={sendMessage} className="flex gap-2">
+              <Input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={
+                  !isAlive
+                    ? "사망한 플레이어는 채팅할 수 없습니다"
+                    : phaseState === "night" && !isMafia
+                      ? "밤에는 채팅할 수 없습니다"
+                      : phaseState === "day" && subPhaseState === "defense" && nickname !== nominatedPlayerState
+                        ? "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다"
+                        : "메시지를 입력하세요"
+                }
+                disabled={!canChat}
+                className="text-sm"
+              />
+              <Button type="submit" disabled={!canChat} size="sm">
+                <SendIcon className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* 모달들 */}
       {showNominationModal && (
         <NominationVoteModal
           players={players}
@@ -760,7 +983,6 @@ export function GameRoom({
         />
       )}
 
-      {/* 처형 투표 모달 */}
       {showExecutionModal && nominatedPlayerState && (
         <ExecutionVoteModal
           nominatedPlayer={nominatedPlayerState}
@@ -768,11 +990,10 @@ export function GameRoom({
           timeLeft={localTimeLeft}
           onVote={handleExecutionVote}
           onClose={() => setShowExecutionModal(false)}
-          players={players} // players prop 명시적으로 전달
+          players={players}
         />
       )}
 
-      {/* 마피아 타겟 선택 모달 */}
       {showMafiaTargetModal && isMafia && isAlive && phaseState === "night" && (
         <MafiaTargetModal
           players={players}
@@ -784,7 +1005,6 @@ export function GameRoom({
         />
       )}
 
-      {/* 투표 결과 팝업 */}
       {showVoteResultPopup && localVoteResult && (
         <VoteResultPopup
           result={localVoteResult}
@@ -793,7 +1013,6 @@ export function GameRoom({
         />
       )}
 
-      {/* 의심 지목 결과 모달 */}
       {showNominationResultModal && nominationResult && (
         <NominationResultModal
           result={nominationResult}
@@ -802,7 +1021,6 @@ export function GameRoom({
         />
       )}
 
-      {/* 페이즈 전환 모달 */}
       {showPhaseTransitionModal && phaseTransitionInfo && (
         <PhaseTransitionModal
           type={phaseTransitionInfo.type}
@@ -811,7 +1029,6 @@ export function GameRoom({
         />
       )}
 
-      {/* 사망자 메시지 */}
       {!isAlive && renderDeadPlayerMessage()}
     </div>
   )

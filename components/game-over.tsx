@@ -6,6 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import type { Player } from "@/types/game"
 import { UserIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { parseCharacterFromNickname } from "@/lib/character-list"
 
 interface GameOverProps {
   winner: "mafia" | "citizen" | null
@@ -63,17 +64,24 @@ export function GameOver({ winner, players, socket, roomId, isHost }: GameOverPr
           <div className="mt-6">
             <h3 className="text-sm font-medium mb-2">플레이어 역할</h3>
             <div className="space-y-2">
-              {players.map((player) => (
-                <div key={player.id} className="flex items-center justify-between p-2 rounded-md bg-secondary">
-                  <div className="flex items-center">
-                    <UserIcon className="h-4 w-4 mr-2" />
-                    <span>{player.nickname}</span>
+              {players.map((player) => {
+                const playerDisplay = parseCharacterFromNickname(player.nickname)
+                return (
+                  <div key={player.id} className="flex items-center justify-between p-2 rounded-md bg-secondary">
+                    <div className="flex items-center">
+                      {playerDisplay ? (
+                        <span className="text-lg mr-2">{playerDisplay.emoji}</span>
+                      ) : (
+                        <UserIcon className="h-4 w-4 mr-2" />
+                      )}
+                      <span>{playerDisplay ? playerDisplay.name : player.nickname}</span>
+                    </div>
+                    <span className={player.role === "mafia" ? "text-red-500" : "text-blue-500"}>
+                      {player.role === "mafia" ? "마피아" : "시민"}
+                    </span>
                   </div>
-                  <span className={player.role === "mafia" ? "text-red-500" : "text-blue-500"}>
-                    {player.role === "mafia" ? "마피아" : "시민"}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </CardContent>

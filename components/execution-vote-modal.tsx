@@ -28,6 +28,8 @@ export function ExecutionVoteModal({
   const [animateVote, setAnimateVote] = useState<"yes" | "no" | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 3 // 최대 시간 (초)
+  const initialRender = useRef(true) // useRef를 컴포넌트 스코프에서 정의
+  const handleCloseRef = useRef(onClose)
 
   // 현재 플레이어가 지목된 플레이어인지 확인 (사망자 처리 로직 강화)
   const isNominated = currentPlayerNickname === nominatedPlayer
@@ -45,16 +47,29 @@ export function ExecutionVoteModal({
   const handleClose = () => {
     setIsExiting(true)
     setTimeout(() => {
-      onClose()
+      handleCloseRef.current()
     }, 200) // 애니메이션 시간과 일치시킴
   }
 
+  useEffect(() => {
+    handleCloseRef.current = onClose
+  }, [onClose])
+
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
+    // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
+
+    if (initialRender.current) {
+      initialRender.current = false
+      // 초기 렌더링 시 timeLeft가 이미 0이면 무시
+      if (timeLeft <= 0) return
+    }
+
     if (timeLeft <= 0 && !isVoted && !isNominated) {
+      console.log("ExecutionVoteModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft, isVoted, isNominated])
+  }, [timeLeft, isVoted, isNominated, handleSubmit]) // handleSubmit을 의존성 배열에 추가
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
@@ -72,7 +87,7 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [isVoted, timeLeft, isNominated])
+  }, [isVoted, timeLeft, isNominated, handleClose]) // handleClose를 의존성 배열에 추가
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {

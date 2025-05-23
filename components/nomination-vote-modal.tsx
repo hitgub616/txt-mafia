@@ -21,6 +21,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
   const [animateSelection, setAnimateSelection] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 5 // 최대 시간 (초)
+  const initialRender = useRef(true) // useRef를 컴포넌트 스코프로 이동
 
   // 투표 가능한 플레이어 목록 (자신 제외, 생존자만) - 사망자 제외 로직 강화
   const votablePlayers = players.filter((player) => {
@@ -43,15 +44,24 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
 
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
+    // 타이머가 0 이하일 때만 자동 제출 처리
+    // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
+
+    if (initialRender.current) {
+      initialRender.current = false
+      // 초기 렌더링 시 timeLeft가 이미 0이면 무시
+      if (timeLeft <= 0) return
+    }
+
     if (timeLeft <= 0 && !isVoted) {
+      console.log("NominationVoteModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft])
+  }, [timeLeft, isVoted])
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // 투표 중에는 외부 클릭으로 모달이 닫히지 않도록 수정
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
         // 투표가 완료되었거나 타이머가 0이 된 경우에만 닫기 허용
         if (isVoted || timeLeft <= 0) {

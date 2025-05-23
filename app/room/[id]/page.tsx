@@ -31,6 +31,7 @@ export default function RoomPage() {
   const [nominatedPlayer, setNominatedPlayer] = useState<string | null>(null)
   const [voteResult, setVoteResult] = useState<VoteResult | null>(null)
   const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
+  const [joinError, setJoinError] = useState<string | null>(null)
 
   const eventListenersSetupRef = useRef(false)
 
@@ -134,10 +135,19 @@ export default function RoomPage() {
       message?: string
     }) => {
       console.log("Received phase change:", data)
+      console.log(`서버에서 받은 timeLeft: ${data.timeLeft}초`)
+
       setPhase(data.phase)
       setSubPhase(data.subPhase || null)
       setDay(data.day)
-      setTimeLeft(data.timeLeft)
+
+      // timeLeft가 유효한 값인지 확인 후 설정
+      if (typeof data.timeLeft === "number" && data.timeLeft >= 0) {
+        setTimeLeft(data.timeLeft)
+        console.log(`timeLeft 상태 업데이트: ${data.timeLeft}초`)
+      } else {
+        console.warn(`유효하지 않은 timeLeft 값: ${data.timeLeft}`)
+      }
 
       if (data.nominatedPlayer !== undefined) {
         setNominatedPlayer(data.nominatedPlayer)
@@ -152,8 +162,14 @@ export default function RoomPage() {
 
   // 시간 업데이트 핸들러
   const handleTimeUpdate = useCallback((time: number) => {
-    console.log("Received time update:", time)
-    setTimeLeft(time)
+    console.log(`서버에서 시간 업데이트 받음: ${time}초`)
+
+    // 유효한 값인지 확인 후 설정
+    if (typeof time === "number" && time >= 0) {
+      setTimeLeft(time)
+    } else {
+      console.warn(`유효하지 않은 time 값: ${time}`)
+    }
   }, [])
 
   // 지목 결과 핸들러
@@ -166,6 +182,12 @@ export default function RoomPage() {
   const handleExecutionResult = useCallback((result: VoteResult) => {
     console.log("Received execution result:", result)
     setVoteResult(result)
+  }, [])
+
+  // 방 참가 에러 핸들러
+  const handleJoinRoomError = useCallback((data: { type: string; message: string }) => {
+    console.log("Received join room error:", data)
+    setJoinError(data.message)
   }, [])
 
   // 소켓 연결 및 방 참가 로직
@@ -197,6 +219,7 @@ export default function RoomPage() {
     socket.on("timeUpdate", handleTimeUpdate)
     socket.on("nominationVoteResult", handleNominationResult)
     socket.on("executionResult", handleExecutionResult)
+    socket.on("joinRoomError", handleJoinRoomError)
     socket.on("systemMessage", (message: string) => {
       console.log("System message:", message)
     })
@@ -212,6 +235,7 @@ export default function RoomPage() {
       socket.off("timeUpdate", handleTimeUpdate)
       socket.off("nominationVoteResult", handleNominationResult)
       socket.off("executionResult", handleExecutionResult)
+      socket.off("joinRoomError", handleJoinRoomError)
       socket.off("systemMessage")
       eventListenersSetupRef.current = false
     }
@@ -224,6 +248,7 @@ export default function RoomPage() {
     handleTimeUpdate,
     handleNominationResult,
     handleExecutionResult,
+    handleJoinRoomError,
   ])
 
   // Handle disconnection
@@ -276,6 +301,30 @@ export default function RoomPage() {
 
   const handleGoBack = () => {
     router.push("/")
+  }
+
+  // 방 참가 에러가 있는 경우 에러 화면 표시
+  if (joinError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center p-4 theme-background">
+        <div className="text-center space-y-4 max-w-md w-full">
+          <div className="text-red-500 mx-auto p-6 bg-red-500/10 rounded-lg border border-red-500/20">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4" />
+            <p className="font-bold text-lg mb-2">방 참가 실패</p>
+            <p className="whitespace-pre-line mb-4">{joinError}</p>
+
+            <div className="flex flex-col space-y-2">
+              <Button onClick={handleGoBack} className="w-full">
+                <ArrowLeft className="h-4 w-4 mr-2" /> 메인으로 돌아가기
+              </Button>
+              <Button variant="outline" onClick={handleRefresh} className="w-full">
+                <RefreshCw className="h-4 w-4 mr-2" /> 새로고침
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Show loading state for online mode

@@ -57,6 +57,17 @@ app.get("/status", (req, res) => {
   })
 })
 
+// 방 상태 정보 API 엔드포인트 추가
+app.get("/api/room-stats", (req, res) => {
+  try {
+    const stats = getRoomStats()
+    res.json(stats)
+  } catch (error) {
+    console.error("Error getting room stats:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 // HTTP 서버 생성
 const server = http.createServer(app)
 
@@ -120,6 +131,54 @@ const MAFIA_AI_CHAT_MESSAGES = [
   "우리 모두 침착하게 생각해봅시다.",
 ]
 
+// 방 상태 정보 집계 함수
+function getRoomStats() {
+  const stats = {
+    waiting: 0,
+    playing: 0,
+    gameOver: 0,
+    total: rooms.size,
+    timestamp: new Date().toISOString(),
+  }
+
+  for (const [roomId, room] of rooms) {
+    switch (room.state) {
+      case "waiting":
+        stats.waiting++
+        break
+      case "playing":
+      case "roleReveal":
+        stats.playing++
+        break
+      case "gameOver":
+        stats.gameOver++
+        break
+    }
+  }
+
+  return stats
+}
+
+// 사용 가능한 방 찾기 함수 (닉네임 중복 확인 포함)
+function findAvailableRoomForNickname(nickname) {
+  for (const [roomId, room] of rooms) {
+    // 대기 중인 방만 확인
+    if (room.state !== "waiting") continue
+
+    // 최대 인원 확인 (9명 미만)
+    if (room.players.length >= 9) continue
+
+    // 닉네임 중복 확인
+    const hasNicknameDuplicate = room.players.some((player) => player.nickname === nickname)
+    if (hasNicknameDuplicate) continue
+
+    // 조건을 만족하는 방 발견
+    return roomId
+  }
+
+  return null
+}
+
 // 디버깅 함수: 방 정보 로깅
 function logRoomInfo(roomId) {
   const room = rooms.get(roomId)
@@ -137,7 +196,7 @@ function logRoomInfo(roomId) {
   )
 }
 
-// 타이머 시작 함수
+// 타이머 시작 함수 수정
 function startTimer(roomId, duration, callback) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -147,25 +206,44 @@ function startTimer(roomId, duration, callback) {
     clearInterval(room.timer)
   }
 
+  // 유효한 duration 값인지 확인
+  if (typeof duration !== "number" || duration < 0) {
+    console.warn(`유효하지 않은 타이머 duration: ${duration}`)
+    duration = 0
+  }
+
   room.timeLeft = duration
+  console.log(`Room ${roomId}: 타이머 시작, 초기값: ${duration}초`)
 
   // 초기 시간 전송
   io.to(roomId).emit("timeUpdate", room.timeLeft)
 
-  // 타이머 시작
-  room.timer = setInterval(() => {
-    room.timeLeft -= 1
+  // 타이머 시작 (duration이 0보다 클 때만)
+  if (duration > 0) {
+    room.timer = setInterval(() => {
+      room.timeLeft -= 1
 
-    // 시간 업데이트 전송
-    io.to(roomId).emit("timeUpdate", room.timeLeft)
+      // 시간 업데이트 전송
+      io.to(roomId).emit("timeUpdate", room.timeLeft)
 
-    // 시간이 다 되면 콜백 실행
-    if (room.timeLeft <= 0) {
-      clearInterval(room.timer)
-      room.timer = null
-      if (callback) callback()
-    }
-  }, 1000)
+      // 디버깅 로그 (1초마다 출력하면 너무 많으므로 5초 간격으로만 출력)
+      if (room.timeLeft % 5 === 0 || room.timeLeft <= 5) {
+        console.log(`Room ${roomId}: 타이머 업데이트, 남은 시간: ${room.timeLeft}초`)
+      }
+
+      // 시간이 다 되면 콜백 실행
+      if (room.timeLeft <= 0) {
+        clearInterval(room.timer)
+        room.timer = null
+        console.log(`Room ${roomId}: 타이머 종료`)
+        if (callback) callback()
+      }
+    }, 1000)
+  } else {
+    // duration이 0이면 바로 콜백 실행
+    console.log(`Room ${roomId}: 타이머 즉시 종료 (duration: ${duration})`)
+    if (callback) callback()
+  }
 }
 
 // 낮 페이즈 시작 함수 (자유 토론 단계)
@@ -240,26 +318,29 @@ function startDayPhase(roomId, day) {
   }
 }
 
-// 의심 지목 단계 시작 함수
+// 의심 지목 단계 시작 함수 수정
 function startNominationPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
 
   room.subPhase = "nomination" // 의심 지목 단계
+  const nominationTime = 5 // 5초로 설정
+
+  console.log(`Room ${roomId}: 의심 지목 단계 시작, 시간: ${nominationTime}초`)
 
   // 페이즈 변경 이벤트 전송
   io.to(roomId).emit("phaseChange", {
     phase: "day",
     subPhase: "nomination",
     day: room.day,
-    timeLeft: 5, // 5초로 설정
+    timeLeft: nominationTime,
   })
 
   // 시스템 메시지 전송
-  io.to(roomId).emit("systemMessage", `의심되는 플레이어를 지목해주세요. (5초)`)
+  io.to(roomId).emit("systemMessage", `의심되는 플레이어를 지목해주세요. (${nominationTime}초)`)
 
-  // 타이머 시작 (5초)
-  startTimer(roomId, 5, () => {
+  // 타이머 시작
+  startTimer(roomId, nominationTime, () => {
     // 시간이 다 되면 지목 결과 처리
     processNominationResult(roomId)
   })
@@ -450,27 +531,30 @@ function startDefensePhase(roomId) {
   }
 }
 
-// 처형 투표 단계 시작 함수
+// 처형 투표 단계 시작 함수 수정
 function startExecutionVotePhase(roomId) {
   const room = rooms.get(roomId)
   if (!room || !room.nominatedPlayer) return
 
   room.subPhase = "execution" // 처형 투표 단계
+  const executionTime = 3 // 3초로 설정
+
+  console.log(`Room ${roomId}: 처형 투표 단계 시작, 시간: ${executionTime}초`)
 
   // 페이즈 변경 이벤트 전송
   io.to(roomId).emit("phaseChange", {
     phase: "day",
     subPhase: "execution",
     day: room.day,
-    timeLeft: 3, // 3초로 설정
+    timeLeft: executionTime,
     nominatedPlayer: room.nominatedPlayer,
   })
 
   // 시스템 메시지 전송
-  io.to(roomId).emit("systemMessage", `${room.nominatedPlayer}님을 처형할지 투표해주세요. (3초)`)
+  io.to(roomId).emit("systemMessage", `${room.nominatedPlayer}님을 처형할지 투표해주세요. (${executionTime}초)`)
 
-  // 타이머 시작 (3초)
-  startTimer(roomId, 3, () => {
+  // 타이머 시작
+  startTimer(roomId, executionTime, () => {
     // 시간이 다 되면 처형 결과 처리
     processExecutionResult(roomId)
   })
@@ -614,7 +698,7 @@ function processExecutionResult(roomId) {
   })
 }
 
-// 밤 페이즈 시작 함수 수정 (페이즈 전환 이벤트 강화)
+// 밤 페이즈 시작 함수 수정
 function startNightPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -622,22 +706,25 @@ function startNightPhase(roomId) {
   room.phase = "night"
   room.subPhase = null
   room.mafiaTarget = null
+  const nightTime = 15 // 15초로 설정
 
-  // 페이즈 변경 이벤트 전송 (강화된 정보 포함)
+  console.log(`Room ${roomId}: 밤 페이즈 시작, 시간: ${nightTime}초`)
+
+  // 페이즈 변경 이벤트 전송
   io.to(roomId).emit("phaseChange", {
     phase: "night",
     subPhase: null,
     day: room.day,
-    timeLeft: 15, // 15초로 설정
-    transitionType: "nightStart", // 페이즈 전환 타입 추가
+    timeLeft: nightTime,
+    transitionType: "nightStart",
     message: "밤이 깊었습니다. 마피아는 서로를 확인하고 활동을 개시하세요. 시민은 조용히 밤이 지나가기를 기다립니다.",
   })
 
   // 시스템 메시지 전송
   io.to(roomId).emit("systemMessage", `${room.day}일차 밤이 시작되었습니다.`)
 
-  // 타이머 시작 (15초)
-  startTimer(roomId, 15, () => {
+  // 타이머 시작
+  startTimer(roomId, nightTime, () => {
     // 시간이 다 되면 다음 낮 페이즈로 전환
     endNightPhase(roomId)
   })
@@ -806,8 +893,64 @@ function endGame(roomId, winner) {
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`)
 
-  // Join room
-  socket.on("joinRoom", ({ roomId, nickname, isHost }) => {
+  // 방 상태 정보 요청 이벤트 핸들러 추가
+  socket.on("requestRoomStats", (callback) => {
+    try {
+      const stats = getRoomStats()
+      console.log("Room stats requested:", stats)
+      if (callback) {
+        callback(stats)
+      } else {
+        socket.emit("roomStatsUpdate", stats)
+      }
+    } catch (error) {
+      console.error("Error handling requestRoomStats:", error)
+      if (callback) {
+        callback({ error: "Failed to get room stats" })
+      }
+    }
+  })
+
+  // 빠른 참가 이벤트 핸들러 수정 (닉네임 중복 방지 강화)
+  socket.on("findAvailableRoom", ({ nickname, character }, callback) => {
+    console.log(`Finding available room for nickname: ${nickname}`)
+
+    try {
+      const availableRoomId = findAvailableRoomForNickname(nickname)
+
+      if (availableRoomId) {
+        console.log(`Found available room ${availableRoomId} for ${nickname}`)
+        const response = { found: true, roomId: availableRoomId }
+
+        if (callback) {
+          callback(response)
+        } else {
+          socket.emit("availableRoom", response)
+        }
+      } else {
+        console.log(`No available room found for ${nickname}`)
+        const response = { found: false, roomId: null, reason: "nickname_conflict_or_no_room" }
+
+        if (callback) {
+          callback(response)
+        } else {
+          socket.emit("availableRoom", response)
+        }
+      }
+    } catch (error) {
+      console.error("Error in findAvailableRoom:", error)
+      const response = { found: false, roomId: null, reason: "server_error" }
+
+      if (callback) {
+        callback(response)
+      } else {
+        socket.emit("availableRoom", response)
+      }
+    }
+  })
+
+  // Join room 이벤트 핸들러 수정 (닉네임 중복 방지 로직 강화)
+  socket.on("joinRoom", ({ roomId, nickname, isHost, character }) => {
     console.log(`User ${nickname} (${socket.id}) joining room ${roomId}, isHost: ${isHost}`)
 
     // 소켓을 해당 방에 조인
@@ -832,11 +975,29 @@ io.on("connection", (socket) => {
 
     const room = rooms.get(roomId)
 
-    // 이미 같은 닉네임의 플레이어가 있는지 확인
+    // 닉네임 중복 확인 강화 (모든 상태에서 확인)
+    const existingPlayer = room.players.find((p) => p.nickname === nickname)
+
+    if (existingPlayer && existingPlayer.id !== socket.id) {
+      // 다른 소켓 ID를 가진 동일한 닉네임의 플레이어가 이미 존재
+      console.log(`Nickname ${nickname} already taken in room ${roomId}`)
+
+      socket.emit("joinRoomError", {
+        type: "nickname_taken",
+        message: "이미 사용 중인 닉네임입니다. 다른 닉네임을 선택해주세요.",
+        takenCharacters: room.players.map((p) => p.nickname),
+      })
+
+      // 방에서 소켓 제거
+      socket.leave(roomId)
+      return
+    }
+
+    // 기존 플레이어 업데이트 또는 새 플레이어 추가
     const existingPlayerIndex = room.players.findIndex((p) => p.nickname === nickname)
 
     if (existingPlayerIndex !== -1) {
-      // 이미 존재하는 플레이어의 소켓 ID 업데이트
+      // 이미 존재하는 플레이어의 소켓 ID 업데이트 (재연결 케이스)
       console.log(
         `Player ${nickname} already exists, updating socket ID from ${room.players[existingPlayerIndex].id} to ${socket.id}`,
       )
@@ -876,6 +1037,12 @@ io.on("connection", (socket) => {
         isAlive: p.isAlive,
         isAi: p.isAi,
       })),
+    )
+
+    // 사용 중인 캐릭터 목록 전송
+    io.to(roomId).emit(
+      "takenCharacters",
+      room.players.map((p) => p.nickname),
     )
 
     // 새로 참가한 플레이어에게 게임 상태 전송
@@ -919,337 +1086,7 @@ io.on("connection", (socket) => {
     }
   })
 
-  // Start game
-  socket.on("startGame", ({ roomId }) => {
-    const room = rooms.get(roomId)
-    if (!room) return
-
-    // 플레이어가 시작한 사람이 호스트인지 확인
-    const player = room.players.find((p) => p.id === socket.id)
-    if (!player || !player.isHost) {
-      socket.emit("systemMessage", "게임을 시작할 권한이 없습니다.")
-      return
-    }
-
-    // Check if enough players
-    if (room.players.length < 2) {
-      socket.emit("systemMessage", "최소 2명의 플레이어가 필요합니다.")
-      return
-    }
-
-    console.log(`Starting game in room ${roomId} with ${room.players.length} players`)
-
-    // Assign roles
-    const assignRoles = (players) => {
-      const shuffledPlayers = [...players]
-
-      // Shuffle array
-      for (let i = shuffledPlayers.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[shuffledPlayers[i], shuffledPlayers[j]] = [shuffledPlayers[j], shuffledPlayers[i]]
-      }
-
-      // Determine number of mafia based on player count
-      let mafiaCount
-      if (players.length === 2) mafiaCount = 1
-      else if (players.length <= 5) mafiaCount = 1
-      else if (players.length <= 8) mafiaCount = 2
-      else mafiaCount = 3
-
-      console.log(`Assigning roles: ${mafiaCount} mafia, ${players.length - mafiaCount} citizens`)
-
-      // Assign roles
-      return shuffledPlayers.map((player, index) => ({
-        ...player,
-        role: index < mafiaCount ? "mafia" : "citizen",
-        isAlive: true,
-        vote: null,
-        nominationVote: null,
-        executionVote: null,
-      }))
-    }
-
-    // Assign roles
-    room.players = assignRoles(room.players)
-
-    // Update game state
-    room.state = "roleReveal"
-    room.day = 1
-    room.phase = "day"
-    room.subPhase = null
-    room.timeLeft = 0
-    room.mafiaTarget = null
-    room.nominatedPlayer = null
-
-    // Send role reveal to all players
-    room.players.forEach((player) => {
-      io.to(player.id).emit("gameStateUpdate", {
-        state: "roleReveal",
-        role: player.role,
-      })
-    })
-
-    // 역할 배정 로그
-    console.log(
-      "Roles assigned:",
-      room.players.map((p) => `${p.nickname}: ${p.role}`),
-    )
-
-    // Start game after 5 seconds
-    setTimeout(() => {
-      console.log(`Starting gameplay in room ${roomId}`)
-      room.state = "playing"
-
-      // 모든 플레이어에게 게임 시작 알림
-      io.to(roomId).emit("gameStateUpdate", {
-        state: "playing",
-        day: room.day,
-        phase: room.phase,
-        subPhase: room.subPhase,
-      })
-
-      // 낮 페이즈 시작
-      startDayPhase(roomId, 1)
-    }, 5000)
-  })
-
-  // Send message
-  socket.on("sendMessage", ({ roomId, sender, content, isMafiaChat = false }) => {
-    const room = rooms.get(roomId)
-    if (!room) return
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id)
-    if (!player) return
-
-    // 살아있는 플레이어만 채팅 가능
-    if (!player.isAlive) {
-      socket.emit("systemMessage", "사망한 플레이어는 채팅할 수 없습니다.")
-      return
-    }
-
-    // 밤에는 마피아만 채팅 가능
-    if (room.phase === "night" && player.role !== "mafia" && !isMafiaChat) {
-      socket.emit("systemMessage", "밤에는 채팅할 수 없습니다.")
-      return
-    }
-
-    // 최후 변론 단계에서는 지목된 플레이어만 채팅 가능
-    if (room.phase === "day" && room.subPhase === "defense" && player.nickname !== room.nominatedPlayer) {
-      socket.emit("systemMessage", "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다.")
-      return
-    }
-
-    // 마피아 채팅은 마피아에게만 전송
-    if (isMafiaChat) {
-      // 마피아 플레이어 ID 목록
-      const mafiaIds = room.players.filter((p) => p.role === "mafia" && p.isAlive).map((p) => p.id)
-
-      // 메시지 생성
-      const message = {
-        sender,
-        content,
-        timestamp: new Date().toISOString(),
-        isMafiaChat: true,
-      }
-
-      // 마피아에게만 전송
-      mafiaIds.forEach((id) => {
-        io.to(id).emit("chatMessage", message)
-      })
-    } else {
-      // 일반 채팅은 모두에게 전송
-      io.to(roomId).emit("chatMessage", {
-        sender,
-        content,
-        timestamp: new Date().toISOString(),
-        isMafiaChat: false,
-      })
-    }
-  })
-
-  // 의심 지목 투표
-  socket.on("submitNominationVote", ({ roomId, target }) => {
-    const room = rooms.get(roomId)
-    if (!room || room.state !== "playing" || room.phase !== "day" || room.subPhase !== "nomination") return
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id && p.isAlive)
-    if (!player) return
-
-    // 투표 대상 확인 (자기 자신은 투표 불가)
-    if (target && player.nickname === target) {
-      socket.emit("systemMessage", "자기 자신을 지목할 수 없습니다.")
-      return
-    }
-
-    // 투표 취소 (같은 대상 다시 클릭)
-    if (player.nominationVote === target) {
-      player.nominationVote = null
-      socket.emit("systemMessage", "지목을 취소했습니다.")
-    } else {
-      // 투표 기록
-      player.nominationVote = target
-      socket.emit("systemMessage", `${target}님을 지목했습니다.`)
-    }
-
-    // 투표 집계
-    const votes = {}
-    room.players.forEach((p) => {
-      if (p.isAlive && p.nominationVote) {
-        votes[p.nominationVote] = (votes[p.nominationVote] || 0) + 1
-      }
-    })
-
-    // 투표 상황 전송
-    io.to(roomId).emit("nominationVoteUpdate", votes)
-
-    // 모든 생존자가 투표했는지 확인
-    const alivePlayers = room.players.filter((p) => p.isAlive)
-    const votedPlayers = room.players.filter((p) => p.isAlive && p.nominationVote)
-
-    if (votedPlayers.length >= alivePlayers.length) {
-      // 모든 플레이어가 투표했으면 지목 결과 처리
-      clearInterval(room.timer)
-      room.timer = null
-
-      // 1초 후 지목 결과 처리 (UI 업데이트 시간 제공)
-      setTimeout(() => {
-        processNominationResult(roomId)
-      }, 1000)
-    }
-  })
-
-  // 처형 투표
-  socket.on("submitExecutionVote", ({ roomId, vote }) => {
-    const room = rooms.get(roomId)
-    if (!room || room.state !== "playing" || room.phase !== "day" || room.subPhase !== "execution") return
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id && p.isAlive)
-    if (!player) return
-
-    // 투표 취소 (같은 선택 다시 클릭)
-    if (player.executionVote === vote) {
-      player.executionVote = null
-      socket.emit("systemMessage", "투표를 취소했습니다.")
-    } else {
-      // 투표 기록
-      player.executionVote = vote
-      socket.emit("systemMessage", `${vote === "yes" ? "찬성" : "반대"}에 투표했습니다.`)
-    }
-
-    // 투표 집계
-    const yesVotes = room.players.filter((p) => p.isAlive && p.executionVote === "yes").length
-    const noVotes = room.players.filter((p) => p.isAlive && p.executionVote === "no").length
-
-    // 투표 상황 전송
-    io.to(roomId).emit("executionVoteUpdate", { yes: yesVotes, no: noVotes })
-
-    // 모든 생존자가 투표했는지 확인
-    const alivePlayers = room.players.filter((p) => p.isAlive)
-    const votedPlayers = room.players.filter((p) => p.isAlive && p.executionVote !== null)
-
-    if (votedPlayers.length >= alivePlayers.length) {
-      // 모든 플레이어가 투표했으면 처형 결과 처리
-      clearInterval(room.timer)
-      room.timer = null
-
-      // 1초 후 처형 결과 처리 (UI 업데이트 시간 제공)
-      setTimeout(() => {
-        processExecutionResult(roomId)
-      }, 1000)
-    }
-  })
-
-  // Mafia target
-  socket.on("mafiaTarget", ({ roomId, target }) => {
-    const room = rooms.get(roomId)
-    if (!room || room.state !== "playing" || room.phase !== "night") return
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id && p.isAlive && p.role === "mafia")
-    if (!player) return
-
-    // 타겟 확인
-    const targetPlayer = room.players.find((p) => p.nickname === target && p.isAlive && p.role !== "mafia")
-    if (!targetPlayer) return
-
-    // 타겟 설정
-    room.mafiaTarget = target
-
-    // 다른 마피아에게 타겟 알림
-    const mafiaIds = room.players.filter((p) => p.role === "mafia" && p.isAlive && p.id !== socket.id).map((p) => p.id)
-
-    mafiaIds.forEach((id) => {
-      io.to(id).emit("systemMessage", `${player.nickname}님이 ${target}님을 타겟으로 선택했습니다.`)
-    })
-
-    // 모든 마피아가 같은 타겟을 선택했는지 확인 (현재는 마지막 선택이 우선)
-    // 밤 페이즈를 일찍 종료하지는 않음 (타이머 유지)
-  })
-
-  // Restart game
-  socket.on("restartGame", ({ roomId }) => {
-    const room = rooms.get(roomId)
-    if (!room || room.state !== "gameOver") return
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id)
-    if (!player || !player.isHost) {
-      socket.emit("systemMessage", "게임을 재시작할 권한이 없습니다.")
-      return
-    }
-
-    // 게임 상태 초기화
-    room.state = "waiting"
-    room.day = 1
-    room.phase = "day"
-    room.subPhase = null
-    room.timeLeft = 0
-    room.mafiaTarget = null
-    room.nominatedPlayer = null
-
-    if (room.timer) {
-      clearInterval(room.timer)
-      room.timer = null
-    }
-
-    // 플레이어 상태 초기화
-    room.players = room.players.map((p) => ({
-      ...p,
-      role: null,
-      isAlive: true,
-      vote: null,
-      nominationVote: null,
-      executionVote: null,
-    }))
-
-    // 게임 상태 업데이트 전송
-    io.to(roomId).emit("gameStateUpdate", { state: "waiting" })
-
-    // 플레이어 목록 업데이트 전송
-    io.to(roomId).emit(
-      "playersUpdate",
-      room.players.map((p) => ({
-        id: p.id,
-        nickname: p.nickname,
-        isHost: p.isHost,
-        isAlive: p.isAlive,
-        isAi: p.isAi,
-      })),
-    )
-
-    // 시스템 메시지 전송
-    io.to(roomId).emit("systemMessage", "게임이 재시작되었습니다.")
-  })
-
-  // Leave room
-  socket.on("leaveRoom", ({ roomId, nickname }) => {
-    handlePlayerDisconnect(socket.id, roomId)
-  })
-
-  // AI 플레이어 추가
+  // AI 플레이어 추가 시 새로운 캐릭터 시스템 적용
   socket.on("addAiPlayer", ({ roomId }, callback) => {
     const room = rooms.get(roomId)
     if (!room) {
@@ -1272,27 +1109,43 @@ io.on("connection", (socket) => {
       return
     }
 
-    // 이미 사용 중인 AI 이름 확인
-    const usedNames = room.players.filter((p) => p.nickname.startsWith("AI-")).map((p) => p.nickname.substring(3))
+    // AI 캐릭터 목록에서 사용 가능한 캐릭터 찾기
+    const AI_CHARACTER_LIST = [
+      { emoji: "🤖", name: "로봇농부", value: "로봇농부" },
+      { emoji: "🤖", name: "로봇상인", value: "로봇상인" },
+      { emoji: "🤖", name: "로봇목수", value: "로봇목수" },
+      { emoji: "🤖", name: "로봇요리사", value: "로봇요리사" },
+      { emoji: "🤖", name: "로봇경비", value: "로봇경비" },
+      { emoji: "🤖", name: "로봇의원", value: "로봇의원" },
+      { emoji: "🤖", name: "로봇어부", value: "로봇어부" },
+      { emoji: "🤖", name: "로봇악사", value: "로봇악사" },
+      { emoji: "🤖", name: "로봇화가", value: "로봇화가" },
+      { emoji: "🤖", name: "로봇교사", value: "로봇교사" },
+    ]
 
-    // 사용 가능한 AI 이름 찾기
-    let aiName = null
-    for (const name of AI_NAMES) {
-      if (!usedNames.includes(name)) {
-        aiName = name
+    // 이미 사용 중인 AI 캐릭터 확인
+    const usedAiCharacters = room.players.filter((p) => p.isAi).map((p) => p.nickname)
+
+    // 사용 가능한 AI 캐릭터 찾기
+    let aiCharacter = null
+    for (const character of AI_CHARACTER_LIST) {
+      const displayName = `${character.emoji} ${character.name}`
+      if (!usedAiCharacters.includes(displayName)) {
+        aiCharacter = character
         break
       }
     }
 
-    // 모든 이름이 사용 중이면 숫자 붙이기
-    if (!aiName) {
-      aiName = `플레이어${Math.floor(Math.random() * 1000)}`
+    // 모든 AI 캐릭터가 사용 중이면 숫자 붙이기
+    if (!aiCharacter) {
+      const randomNum = Math.floor(Math.random() * 1000)
+      aiCharacter = { emoji: "🤖", name: `로봇${randomNum}`, value: `로봇${randomNum}` }
     }
 
     // AI 플레이어 추가
     const aiPlayer = {
       id: `ai-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      nickname: `AI-${aiName}`,
+      nickname: `${aiCharacter.emoji} ${aiCharacter.name}`,
       isHost: false,
       role: null,
       isAlive: true,
@@ -1317,173 +1170,30 @@ io.on("connection", (socket) => {
       })),
     )
 
+    // 사용 중인 캐릭터 목록 업데이트 전송
+    io.to(roomId).emit(
+      "takenCharacters",
+      room.players.map((p) => p.nickname),
+    )
+
     // 시스템 메시지 전송
     io.to(roomId).emit("systemMessage", `AI 플레이어 ${aiPlayer.nickname}이(가) 게임에 참가했습니다.`)
 
     if (callback) callback({ success: true })
   })
 
-  // AI 플레이어 제거
-  socket.on("removeAiPlayer", ({ roomId }, callback) => {
-    const room = rooms.get(roomId)
-    if (!room) {
-      if (callback) callback({ success: false, error: "Room not found" })
-      return
-    }
-
-    // 플레이어 확인
-    const player = room.players.find((p) => p.id === socket.id)
-    if (!player || !player.isHost) {
-      socket.emit("systemMessage", "AI 플레이어를 제거할 권한이 없습니다.")
-      if (callback) callback({ success: false, error: "Not authorized" })
-      return
-    }
-
-    // AI 플레이어 찾기
-    const aiPlayerIndex = room.players.findIndex((p) => p.isAi)
-    if (aiPlayerIndex === -1) {
-      socket.emit("systemMessage", "제거할 AI 플레이어가 없습니다.")
-      if (callback) callback({ success: false, error: "No AI player" })
-      return
-    }
-
-    // AI 플레이어 제거
-    const removedAi = room.players.splice(aiPlayerIndex, 1)[0]
-    console.log(`AI player ${removedAi.nickname} removed from room ${roomId}`)
-
-    // 업데이트된 플레이어 목록 전송
-    io.to(roomId).emit(
-      "playersUpdate",
-      room.players.map((p) => ({
-        id: p.id,
-        nickname: p.nickname,
-        isHost: p.isHost,
-        isAlive: p.isAlive,
-        isAi: p.isAi,
-      })),
-    )
-
-    // 시스템 메시지 전송
-    io.to(roomId).emit("systemMessage", `AI 플레이어 ${removedAi.nickname}이(가) 게임에서 나갔습니다.`)
-
-    if (callback) callback({ success: true })
-  })
-
-  // 빠른 참가를 위한 사용 가능한 방 찾기
-  socket.on("findAvailableRoom", ({ nickname }) => {
-    console.log(`User ${nickname} is looking for an available room`)
-
-    // 참여 가능한 방 찾기 (대기 중이고 빈자리가 있는 방)
-    let availableRoom = null
-
-    for (const [roomId, room] of rooms.entries()) {
-      if (room.state === "waiting" && room.players.length < 9) {
-        availableRoom = roomId
-        break
-      }
-    }
-
-    // 결과 전송
-    socket.emit("availableRoom", {
-      found: !!availableRoom,
-      roomId: availableRoom,
-    })
-  })
-
-  // Disconnect
+  // 연결 해제 처리
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`)
-
-    // Find all rooms the player is in
-    rooms.forEach((room, roomId) => {
-      handlePlayerDisconnect(socket.id, roomId)
-    })
   })
 })
 
-function handlePlayerDisconnect(socketId, roomId) {
-  const room = rooms.get(roomId)
-  if (!room) return
-
-  // Find player
-  const playerIndex = room.players.findIndex((p) => p.id === socketId)
-  if (playerIndex === -1) return
-
-  const player = room.players[playerIndex]
-  console.log(`Player ${player.nickname} disconnected from room ${roomId}`)
-
-  // If game is in progress, mark player as dead
-  if (room.state === "playing") {
-    io.to(roomId).emit("systemMessage", `${player.nickname}님이 게임에서 나갔습니다.`)
-    player.isAlive = false
-
-    // 게임 종료 조건 확인
-    const gameResult = checkGameEnd(room)
-    if (gameResult) {
-      endGame(roomId, gameResult)
-    }
-  } else {
-    // Remove player from room
-    room.players.splice(playerIndex, 1)
-
-    // 수정: 실제 플레이어가 모두 나가고 AI만 남은 경우 방 삭제
-    const hasRealPlayers = room.players.some((p) => !p.isAi)
-    if (!hasRealPlayers || room.players.length === 0) {
-      console.log(`Room ${roomId} has no real players or is empty, deleting it`)
-
-      // 타이머가 있으면 정리
-      if (room.timer) {
-        clearInterval(room.timer)
-      }
-
-      rooms.delete(roomId)
-      return
-    }
-
-    // If host left, assign new host
-    if (player.isHost && room.players.length > 0) {
-      // 실제 플레이어 중에서 새 호스트 찾기
-      const newHostIndex = room.players.findIndex((p) => !p.isAi)
-      if (newHostIndex !== -1) {
-        console.log(`Host ${player.nickname} left, assigning new host: ${room.players[newHostIndex].nickname}`)
-        room.players[newHostIndex].isHost = true
-      } else {
-        // 모든 플레이어가 AI인 경우 첫 번째 AI를 호스트로 설정
-        console.log(`Host ${player.nickname} left, assigning AI as host: ${room.players[0].nickname}`)
-        room.players[0].isHost = true
-      }
-    }
-  }
-
-  // 방 정보 로깅
-  logRoomInfo(roomId)
-
-  // Broadcast updated player list
-  io.to(roomId).emit(
-    "playersUpdate",
-    room.players.map((p) => ({
-      id: p.id,
-      nickname: p.nickname,
-      isHost: p.isHost,
-      isAlive: p.isAlive,
-      isAi: p.isAi,
-    })),
-  )
-}
-
-// Start server
+// 서버 시작
 server.listen(PORT, () => {
-  console.log(`
-========================================
- Mafia Game Server
-========================================
- Server running on port: ${PORT}
- Environment: ${isDev ? "Development" : "Production"}
- CORS: All origins allowed
- 
- Local URL: http://localhost:${PORT}
- Railway URL: ${RAILWAY_URL || "Not deployed on Railway yet"}
- Client URL: ${CLIENT_URL}
-========================================
- `)
+  console.log(`Server running on port ${PORT}`)
+  console.log(`Environment: ${isDev ? "development" : "production"}`)
+  console.log(`Client URL: ${CLIENT_URL}`)
+  if (RAILWAY_URL) {
+    console.log(`Railway URL: ${RAILWAY_URL}`)
+  }
 })
