@@ -712,7 +712,7 @@ function endNightPhase(roomId) {
           id: p.id,
           nickname: p.nickname,
           isHost: p.isHost,
-          isAlive: p.isAlive, // 사망 상태 포함
+          isAlive: p.isAlive,
           isAi: p.isAi,
         })),
       )
@@ -738,17 +738,23 @@ function checkGameEnd(room) {
   const aliveMafia = alivePlayers.filter((p) => p.role === "mafia").length
   const aliveCitizens = alivePlayers.filter((p) => p.role === "citizen").length
 
+  // 디버깅 로그 추가
+  console.log(`[Game End Check] Room ${room.id}: Alive Mafia: ${aliveMafia}, Alive Citizens: ${aliveCitizens}`)
+
   // 마피아가 시민과 같거나 많으면 마피아 승리
   if (aliveMafia >= aliveCitizens) {
+    console.log(`[Game End] Mafia wins: ${aliveMafia} mafia >= ${aliveCitizens} citizens`)
     return "mafia"
   }
 
   // 마피아가 모두 죽으면 시민 승리
   if (aliveMafia === 0) {
+    console.log(`[Game End] Citizens win: No mafia left alive`)
     return "citizen"
   }
 
   // 게임 계속
+  console.log(`[Game End] Game continues: ${aliveMafia} mafia < ${aliveCitizens} citizens`)
   return null
 }
 
@@ -766,10 +772,18 @@ function endGame(roomId, winner) {
     room.timer = null
   }
 
-  // 게임 종료 이벤트 전송
+  // 게임 종료 이벤트 전송 (플레이어 역할 정보 포함)
   io.to(roomId).emit("gameStateUpdate", {
     state: "gameOver",
     winner: winner,
+    players: room.players.map((p) => ({
+      id: p.id,
+      nickname: p.nickname,
+      isHost: p.isHost,
+      role: p.role,
+      isAlive: p.isAlive,
+      isAi: p.isAi,
+    })),
   })
 
   // 승리 메시지 전송
@@ -779,6 +793,13 @@ function endGame(roomId, winner) {
       : "모든 마피아가 처형되었습니다. 시민의 승리입니다."
 
   io.to(roomId).emit("systemMessage", winnerText)
+
+  // 디버깅 로그 추가
+  console.log(`[Game Over] Room ${roomId}: ${winner} wins`)
+  console.log(
+    `[Game Over] Players:`,
+    room.players.map((p) => `${p.nickname} (${p.role})`),
+  )
 }
 
 // Socket connection

@@ -87,6 +87,7 @@ export default function RoomPage() {
       phase?: "day" | "night"
       subPhase?: DaySubPhase | null
       winner?: "mafia" | "citizen"
+      players?: Player[]
     }) => {
       console.log("Received game state update:", data)
       setGameState(data.state)
@@ -109,6 +110,12 @@ export default function RoomPage() {
 
       if (data.winner) {
         setWinner(data.winner)
+      }
+
+      // 게임 종료 시 서버에서 받은 플레이어 정보로 업데이트
+      if (data.state === "gameOver" && data.players) {
+        console.log("Updating players with game over data:", data.players)
+        setPlayers(data.players)
       }
     },
     [],

@@ -18,6 +18,13 @@ interface GameOverProps {
 export function GameOver({ winner, players, socket, roomId, isHost }: GameOverProps) {
   const router = useRouter()
 
+  // 디버깅 로그 추가
+  console.log("GameOver component received players:", players)
+  console.log(
+    "Players with roles:",
+    players.map((p) => `${p.nickname}: ${p.role}`),
+  )
+
   const handlePlayAgain = () => {
     if (socket) {
       socket.emit("restartGame", { roomId })
