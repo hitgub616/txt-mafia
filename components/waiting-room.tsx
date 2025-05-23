@@ -52,7 +52,7 @@ export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = f
     if (!socket || !isHost) return
 
     // AI 플레이어 수 계산
-    const aiPlayers = players.filter((p) => p.nickname.startsWith("AI-"))
+    const aiPlayers = players.filter((p) => p.isAi || p.nickname.startsWith("AI-"))
     if (aiPlayers.length === 0) return
 
     setIsRemovingAi(true)
@@ -65,8 +65,8 @@ export function WaitingRoom({ players, roomId, isHost, socket, isOfflineMode = f
   }
 
   // AI 플레이어 수 계산
-  const aiPlayers = players.filter((p) => p.nickname.startsWith("AI-"))
-  const humanPlayers = players.filter((p) => !p.nickname.startsWith("AI-"))
+  const aiPlayers = players.filter((p) => p.isAi || p.nickname.startsWith("AI-"))
+  const humanPlayers = players.filter((p) => !p.isAi && !p.nickname.startsWith("AI-"))
 
   const canStartGame = players.length >= 2 && players.length <= 9 && isHost
   const canAddAi = isHost && players.length < 9

@@ -98,6 +98,7 @@ export function LobbyForm() {
     router.push(`/room/${finalRoomId}`)
   }
 
+  // handleQuickJoin 함수 수정
   const handleQuickJoin = async () => {
     if (!selectedCharacter) {
       setError("빠른 참가를 위해 캐릭터를 선택해주세요.")

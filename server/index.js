@@ -159,7 +159,7 @@ function getRoomStats() {
   return stats
 }
 
-// 사용 가능한 방 찾기 함수 (닉네임 중복 확인 포함)
+// 사용 가능한 방 찾기 함수 수정
 function findAvailableRoomForNickname(nickname) {
   for (const [roomId, room] of rooms) {
     // 대기 중인 방만 확인
@@ -889,7 +889,7 @@ function endGame(roomId, winner) {
   )
 }
 
-// Socket connection
+// 방 상태 정보 요청 이벤트 핸들러 추가
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`)
 
@@ -911,7 +911,7 @@ io.on("connection", (socket) => {
     }
   })
 
-  // 빠른 참가 이벤트 핸들러 수정 (닉네임 중복 방지 강화)
+  // 빠른 참가 이벤트 핸들러 수정
   socket.on("findAvailableRoom", ({ nickname, character }, callback) => {
     console.log(`Finding available room for nickname: ${nickname}`)
 
@@ -949,7 +949,7 @@ io.on("connection", (socket) => {
     }
   })
 
-  // Join room 이벤트 핸들러 수정 (닉네임 중복 방지 로직 강화)
+  // Join room 이벤트 핸들러 수정
   socket.on("joinRoom", ({ roomId, nickname, isHost, character }) => {
     console.log(`User ${nickname} (${socket.id}) joining room ${roomId}, isHost: ${isHost}`)
 
@@ -1182,10 +1182,168 @@ io.on("connection", (socket) => {
     if (callback) callback({ success: true })
   })
 
+  // AI 플레이어 제거 이벤트 핸들러 추가
+  socket.on("removeAiPlayer", ({ roomId }, callback) => {
+    const room = rooms.get(roomId)
+    if (!room) {
+      if (callback) callback({ success: false, error: "Room not found" })
+      return
+    }
+
+    // 플레이어 확인
+    const player = room.players.find((p) => p.id === socket.id)
+    if (!player || !player.isHost) {
+      socket.emit("systemMessage", "AI 플레이어를 제거할 권한이 없습니다.")
+      if (callback) callback({ success: false, error: "Not authorized" })
+      return
+    }
+
+    // AI 플레이어 찾기
+    const aiPlayers = room.players.filter((p) => p.isAi)
+    if (aiPlayers.length === 0) {
+      socket.emit("systemMessage", "제거할 AI 플레이어가 없습니다.")
+      if (callback) callback({ success: false, error: "No AI players" })
+      return
+    }
+
+    // 마지막으로 추가된 AI 플레이어 제거
+    const lastAiPlayer = aiPlayers[aiPlayers.length - 1]
+    const index = room.players.findIndex((p) => p.id === lastAiPlayer.id)
+    if (index !== -1) {
+      room.players.splice(index, 1)
+      console.log(`AI player ${lastAiPlayer.nickname} removed from room ${roomId}`)
+
+      // 업데이트된 플레이어 목록 전송
+      io.to(roomId).emit(
+        "playersUpdate",
+        room.players.map((p) => ({
+          id: p.id,
+          nickname: p.nickname,
+          isHost: p.isHost,
+          isAlive: p.isAlive,
+          isAi: p.isAi,
+        })),
+      )
+
+      // 사용 중인 캐릭터 목록 업데이트 전송
+      io.to(roomId).emit(
+        "takenCharacters",
+        room.players.map((p) => p.nickname),
+      )
+
+      // 시스템 메시지 전송
+      io.to(roomId).emit("systemMessage", `AI 플레이어 ${lastAiPlayer.nickname}이(가) 게임에서 제거되었습니다.`)
+
+      if (callback) callback({ success: true })
+    } else {
+      if (callback) callback({ success: false, error: "Failed to remove AI player" })
+    }
+  })
+
   // 연결 해제 처리
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`)
   })
+
+  // startGame 이벤트 핸들러 수정 (AI 플레이어 처리 확인)
+  socket.on("startGame", ({ roomId }) => {
+    const room = rooms.get(roomId)
+    if (!room) return
+
+    // 플레이어 확인
+    const player = room.players.find((p) => p.id === socket.id)
+    if (!player || !player.isHost) {
+      socket.emit("systemMessage", "게임을 시작할 권한이 없습니다.")
+      return
+    }
+
+    // 최소 인원 확인 (2명 이상)
+    if (room.players.length < 2) {
+      socket.emit("systemMessage", "게임을 시작하려면 최소 2명의 플레이어가 필요합니다.")
+      return
+    }
+
+    // 최대 인원 확인 (9명 이하)
+    if (room.players.length > 9) {
+      socket.emit("systemMessage", "게임은 최대 9명까지만 참여할 수 있습니다.")
+      return
+    }
+
+    // 게임 상태 업데이트
+    room.state = "roleReveal"
+
+    // 역할 배정
+    assignRoles(room)
+
+    // 게임 상태 업데이트 이벤트 전송
+    io.to(roomId).emit("gameStateUpdate", {
+      state: "roleReveal",
+    })
+
+    // 각 플레이어에게 역할 전송
+    room.players.forEach((p) => {
+      io.to(p.id).emit("gameStateUpdate", {
+        state: "roleReveal",
+        role: p.role,
+      })
+    })
+
+    // 5초 후 게임 시작
+    setTimeout(() => {
+      room.state = "playing"
+      room.day = 1
+      room.phase = "day"
+      room.subPhase = "discussion"
+
+      // 게임 상태 업데이트 이벤트 전송
+      io.to(roomId).emit("gameStateUpdate", {
+        state: "playing",
+        day: room.day,
+        phase: room.phase,
+        subPhase: room.subPhase,
+      })
+
+      // 낮 페이즈 시작
+      startDayPhase(roomId, 1)
+    }, 5000)
+  })
+
+  // assignRoles 함수 수정 (AI 플레이어 처리 확인)
+  function assignRoles(room) {
+    const players = [...room.players]
+
+    // 플레이어 배열 섞기
+    for (let i = players.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[players[i], players[j]] = [players[j], [i]]
+    }
+
+    // 마피아 수 결정
+    let mafiaCount
+    if (players.length <= 5) mafiaCount = 1
+    else if (players.length <= 8) mafiaCount = 2
+    else mafiaCount = 3
+
+    // 역할 배정
+    players.forEach((player, index) => {
+      const role = index < mafiaCount ? "mafia" : "citizen"
+
+      // room.players 배열에서 해당 플레이어 찾아 역할 설정
+      const playerInRoom = room.players.find((p) => p.id === player.id)
+      if (playerInRoom) {
+        playerInRoom.role = role
+        playerInRoom.isAlive = true
+        playerInRoom.vote = null
+        playerInRoom.nominationVote = null
+        playerInRoom.executionVote = null
+      }
+    })
+
+    console.log(
+      `Assigned roles in room ${room.id}:`,
+      room.players.map((p) => `${p.nickname}: ${p.role}`),
+    )
+  }
 })
 
 // 서버 시작
