@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import type { Player } from "@/types/game"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,11 +42,31 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
     players.filter((p) => !p.isAlive).map((p) => p.nickname),
   )
 
+  // 모달 닫기 (애니메이션 포함)
+  const handleClose = useCallback(() => {
+    setIsExiting(true)
+    setTimeout(() => {
+      onClose()
+    }, 200) // 애니메이션 시간과 일치시킴
+  }, [onClose])
+
+  // 투표 제출 함수를 useCallback으로 메모이제이션
+  const handleSubmit = useCallback(() => {
+    if (isVoted) return
+
+    setIsVoted(true)
+    onVote(selectedPlayer)
+
+    // 투표 후 모달 닫기 (약간의 지연 후)
+    setTimeout(() => {
+      handleClose()
+    }, 500)
+  }, [selectedPlayer, isVoted, onVote, handleClose])
+
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
     // 타이머가 0 이하일 때만 자동 제출 처리
     // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
-
     if (initialRender.current) {
       initialRender.current = false
       // 초기 렌더링 시 timeLeft가 이미 0이면 무시
@@ -57,7 +77,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
       console.log("NominationVoteModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft, isVoted])
+  }, [timeLeft, isVoted, handleSubmit])
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
@@ -75,7 +95,7 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [isVoted, timeLeft])
+  }, [isVoted, timeLeft, handleClose])
 
   // 플레이어 선택 처리
   const handlePlayerSelect = (nickname: string) => {
@@ -92,27 +112,6 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
         setAnimateSelection(null)
       }, 500)
     }
-  }
-
-  // 투표 제출
-  const handleSubmit = () => {
-    if (isVoted) return
-
-    setIsVoted(true)
-    onVote(selectedPlayer)
-
-    // 투표 후 모달 닫기 (약간의 지연 후)
-    setTimeout(() => {
-      handleClose()
-    }, 500)
-  }
-
-  // 모달 닫기 (애니메이션 포함)
-  const handleClose = () => {
-    setIsExiting(true)
-    setTimeout(() => {
-      onClose()
-    }, 200) // 애니메이션 시간과 일치시킴
   }
 
   // 타이머 임계값 확인 (5초 이하)

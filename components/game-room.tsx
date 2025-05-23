@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { MoonIcon, SunIcon, SendIcon, LogOut, AlertCircle, Clock, Info, Ghost, Skull } from "lucide-react"
+import { MoonIcon, SunIcon, SendIcon, LogOut, Clock, Info, Ghost, Skull } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { NominationVoteModal } from "./nomination-vote-modal"
 import { ExecutionVoteModal } from "./execution-vote-modal"
@@ -18,7 +18,6 @@ import { VoteResultPopup } from "./vote-result-popup"
 import { NominationResultModal } from "./nomination-result-modal"
 import { PhaseTransitionModal } from "./phase-transition-modal"
 import { MafiaTargetModal } from "./mafia-target-modal"
-import { toast } from "sonner"
 import { parseCharacterFromNickname } from "@/lib/character-list"
 
 interface GameRoomProps {
@@ -164,89 +163,14 @@ export function GameRoom({
     [phaseState, subPhaseState],
   )
 
-  // 페이즈 변경 시 토스트 알림 표시
+  // 페이즈 변경 시 토스트 알림 제거 (요청에 따라 모든 toast 호출 제거)
   useEffect(() => {
     // 페이즈나 서브페이즈가 변경되었을 때만 실행
     if ((prevPhase !== null && prevPhase !== phaseState) || (prevSubPhase !== null && prevSubPhase !== subPhaseState)) {
-      // 페이즈 변경 알림 메시지 생성
-      let title = ""
-      let description = ""
-      let icon = null
-
-      if (phaseState === "day" && prevPhase === "night") {
-        title = `${dayState}일차 낮이 시작되었습니다`
-        description = "모든 플레이어가 깨어납니다. 마피아를 찾아내세요!"
-        icon = <SunIcon className="h-5 w-5 text-yellow-500" />
-
-        // 낮 시작 토스트 알림
-        toast(title, {
-          description: description,
-          icon: icon,
-          duration: 3000,
-          position: "top-center",
-          className: "bg-yellow-50 border-yellow-200 text-yellow-900",
-        })
-      } else if (phaseState === "night" && prevPhase === "day") {
-        title = "밤이 되었습니다"
-        description = isMafia ? "마피아는 제거할 대상을 선택하세요." : "마피아의 행동을 기다리는 중입니다."
-        icon = <MoonIcon className="h-5 w-5 text-blue-500" />
-
-        // 밤 시작 토스트 알림
-        toast(title, {
-          description: description,
-          icon: icon,
-          duration: 3000,
-          position: "top-center",
-          className:
-            "bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-900 dark:border-blue-800 dark:text-blue-100",
-        })
-
-        // 마피아인 경우 타겟 선택 모달 표시 (timeLeft가 0보다 클 때만)
-        if (isMafia && isAlive && localTimeLeft > 0) {
-          console.log(`마피아 타겟 모달 표시, 남은 시간: ${localTimeLeft}초`)
-          setShowMafiaTargetModal(true)
-        }
-      } else if (phaseState === "day") {
-        // 낮 서브페이즈 변경 알림
-        if (subPhaseState === "discussion" && prevSubPhase !== "discussion") {
-          title = "자유 토론 시간"
-          description = "의심되는 플레이어에 대해 토론하세요."
-
-          toast(title, {
-            description: description,
-            icon: <Info className="h-5 w-5 text-blue-500" />,
-            duration: 2000,
-          })
-        } else if (subPhaseState === "nomination" && prevSubPhase !== "nomination") {
-          title = "의심 지목 투표 시간"
-          description = "의심되는 플레이어를 지목해주세요."
-
-          toast(title, {
-            description: description,
-            icon: <AlertCircle className="h-5 w-5 text-orange-500" />,
-            duration: 2000,
-          })
-        } else if (subPhaseState === "defense" && prevSubPhase !== "defense") {
-          title = "최후 변론 시간"
-          description =
-            nominatedPlayerState === nickname
-              ? "당신이 지목되었습니다. 최후 변론을 하세요."
-              : `${nominatedPlayerState}님의 최후 변론 시간입니다.`
-
-          toast(title, {
-            description: description,
-            duration: 2000,
-          })
-        } else if (subPhaseState === "execution" && prevSubPhase !== "execution") {
-          title = "처형 투표 시간"
-          description = `${nominatedPlayerState}님을 처형할지 투표해주세요.`
-
-          toast(title, {
-            description: description,
-            icon: <AlertCircle className="h-5 w-5 text-red-500" />,
-            duration: 2000,
-          })
-        }
+      // 마피아인 경우 타겟 선택 모달 표시 (timeLeft가 0보다 클 때만)
+      if (phaseState === "night" && prevPhase === "day" && isMafia && isAlive && localTimeLeft > 0) {
+        console.log(`마피아 타겟 모달 표시, 남은 시간: ${localTimeLeft}초`)
+        setShowMafiaTargetModal(true)
       }
     }
   }, [
@@ -875,13 +799,13 @@ export function GameRoom({
 
         {/* 플레이어 목록 (가로 스크롤) */}
         <div className="bg-background border-b border-border p-2">
-          <div className="flex space-x-2 overflow-x-auto pb-1">
+          <div className="flex space-x-2 overflow-x-auto pb-1 px-1">
             {players.map((player) => {
               const playerDisplay = getPlayerDisplay(player)
               return (
                 <div
                   key={player.id}
-                  className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg min-w-[60px] ${
+                  className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg min-w-[60px] max-w-[70px] ${
                     player.isAlive ? "bg-secondary" : "bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50"
                   } ${player.nickname === nickname ? "ring-2 ring-primary" : ""}`}
                 >
@@ -902,7 +826,7 @@ export function GameRoom({
           </div>
         </div>
 
-        {/* 채팅 영역 */}
+        {/* 채팅 영역 - 모바일 환경 개선 */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full p-3">
@@ -962,7 +886,7 @@ export function GameRoom({
                         : "메시지를 입력하세요"
                 }
                 disabled={!canChat}
-                className="text-sm"
+                className="text-base" // 모바일에서 확대 방지를 위해 font-size 16px 이상으로 설정
               />
               <Button type="submit" disabled={!canChat} size="sm">
                 <SendIcon className="h-4 w-4" />

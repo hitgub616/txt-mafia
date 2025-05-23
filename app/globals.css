@@ -57,6 +57,20 @@
     @apply bg-background text-foreground;
     transition: background-color 3s ease-in-out, color 3s ease-in-out;
   }
+
+  /* 모바일 확대 방지 */
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px; /* 모바일에서 확대 방지를 위한 최소 폰트 크기 */
+  }
+
+  /* 모바일 터치 영역 개선 */
+  button,
+  a {
+    touch-action: manipulation;
+  }
 }
 
 /* 테마에 따른 배경 클래스 */
@@ -67,6 +81,14 @@
 
   .dark .theme-background {
     @apply bg-gradient-to-b from-gray-900 to-black transition-all duration-3000 ease-in-out;
+  }
+
+  /* 모바일 채팅 영역 스크롤 영역 높이 조정 */
+  @media (max-width: 768px) {
+    .mobile-chat-scroll {
+      height: calc(100vh - 180px) !important;
+      max-height: 60vh;
+    }
   }
 }
 

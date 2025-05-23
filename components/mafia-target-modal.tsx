@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, UserIcon, Target, Skull } from "lucide-react"
@@ -30,6 +30,7 @@ export function MafiaTargetModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 15 // 최대 시간 (초)
   const initialRender = useRef(true)
+  const handleCloseRef = useRef(onClose)
 
   // 타겟 가능한 플레이어 목록 (자신 제외, 마피아 제외, 생존자만)
   const targetablePlayers = players.filter((player) => {
@@ -45,10 +46,34 @@ export function MafiaTargetModal({
     return true
   })
 
+  // 모달 닫기 (애니메이션 포함)
+  const handleClose = useCallback(() => {
+    setIsExiting(true)
+    setTimeout(() => {
+      handleCloseRef.current()
+    }, 200) // 애니메이션 시간과 일치시킴
+  }, [])
+
+  useEffect(() => {
+    handleCloseRef.current = onClose
+  }, [onClose])
+
+  // 타겟 선택 제출 함수를 useCallback으로 메모이제이션
+  const handleSubmit = useCallback(() => {
+    if (isSelected) return
+
+    setIsSelected(true)
+    onTarget(target)
+
+    // 타겟 선택 후 모달 닫기 (약간의 지연 후)
+    setTimeout(() => {
+      handleClose()
+    }, 500)
+  }, [target, isSelected, onTarget, handleClose])
+
   // 타이머가 끝나면 자동으로 타겟 선택 처리
   useEffect(() => {
     // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
-
     if (initialRender.current) {
       initialRender.current = false
       // 초기 렌더링 시 timeLeft가 이미 0이면 무시
@@ -59,7 +84,7 @@ export function MafiaTargetModal({
       console.log("MafiaTargetModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft])
+  }, [timeLeft, isSelected, handleSubmit])
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지
   useEffect(() => {
@@ -77,7 +102,7 @@ export function MafiaTargetModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [isSelected, timeLeft])
+  }, [isSelected, timeLeft, handleClose])
 
   // 플레이어 선택 처리
   const handlePlayerSelect = (nickname: string) => {
@@ -94,27 +119,6 @@ export function MafiaTargetModal({
         setAnimateTarget(null)
       }, 500)
     }
-  }
-
-  // 타겟 선택 제출
-  const handleSubmit = () => {
-    if (isSelected) return
-
-    setIsSelected(true)
-    onTarget(target)
-
-    // 타겟 선택 후 모달 닫기 (약간의 지연 후)
-    setTimeout(() => {
-      handleClose()
-    }, 500)
-  }
-
-  // 모달 닫기 (애니메이션 포함)
-  const handleClose = () => {
-    setIsExiting(true)
-    setTimeout(() => {
-      onClose()
-    }, 200) // 애니메이션 시간과 일치시킴
   }
 
   // 타이머 임계값 확인 (5초 이하)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, ThumbsUp, ThumbsDown, AlertCircle, Skull } from "lucide-react"
@@ -44,21 +44,33 @@ export function ExecutionVoteModal({
   const canVote = !isNominated && !isPlayerDead
 
   // 모달 닫기 (애니메이션 포함)
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsExiting(true)
     setTimeout(() => {
       handleCloseRef.current()
     }, 200) // 애니메이션 시간과 일치시킴
-  }
+  }, [])
 
   useEffect(() => {
     handleCloseRef.current = onClose
   }, [onClose])
 
+  // 투표 제출 함수를 useCallback으로 메모이제이션
+  const handleSubmit = useCallback(() => {
+    if (isVoted || isNominated) return
+
+    setIsVoted(true)
+    onVote(vote)
+
+    // 투표 후 모달 닫기 (약간의 지연 후)
+    setTimeout(() => {
+      handleClose()
+    }, 500)
+  }, [vote, isVoted, isNominated, onVote, handleClose])
+
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
     // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
-
     if (initialRender.current) {
       initialRender.current = false
       // 초기 렌더링 시 timeLeft가 이미 0이면 무시
@@ -69,7 +81,7 @@ export function ExecutionVoteModal({
       console.log("ExecutionVoteModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft, isVoted, isNominated, handleSubmit]) // handleSubmit을 의존성 배열에 추가
+  }, [timeLeft, isVoted, isNominated, handleSubmit])
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
@@ -87,7 +99,7 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [isVoted, timeLeft, isNominated, handleClose]) // handleClose를 의존성 배열에 추가
+  }, [isVoted, timeLeft, isNominated, handleClose])
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {
@@ -104,19 +116,6 @@ export function ExecutionVoteModal({
         setAnimateVote(null)
       }, 500)
     }
-  }
-
-  // 투표 제출
-  const handleSubmit = () => {
-    if (isVoted || isNominated) return
-
-    setIsVoted(true)
-    onVote(vote)
-
-    // 투표 후 모달 닫기 (약간의 지연 후)
-    setTimeout(() => {
-      handleClose()
-    }, 500)
   }
 
   // 사망자 메시지 추가
