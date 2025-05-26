@@ -50,17 +50,15 @@ export function NominationVoteModal({ players, currentPlayer, timeLeft, onVote, 
     }, 200) // 애니메이션 시간과 일치시킴
   }, [onClose])
 
-  // 투표 제출 함수를 useCallback으로 메모이제이션
+  // 투표 제출 함수 수정 - 즉시 모달 닫기
   const handleSubmit = useCallback(() => {
     if (isVoted) return
 
     setIsVoted(true)
     onVote(selectedPlayer)
 
-    // 투표 후 모달 닫기 (약간의 지연 후)
-    setTimeout(() => {
-      handleClose()
-    }, 500)
+    // 투표 후 즉시 모달 닫기 (지연 제거)
+    handleClose()
   }, [selectedPlayer, isVoted, onVote, handleClose])
 
   // 타이머가 끝나면 자동으로 투표 처리

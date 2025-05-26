@@ -495,10 +495,10 @@ function processNominationResult(roomId) {
 
     io.to(roomId).emit("systemMessage", `${nominated}님이 최다 득표로 지목되었습니다. 최후 변론을 시작합니다.`)
 
-    // 중요 변경: 결과 공시 후 6초 지연을 두고 최후 변론 단계로 전환
+    // 결과 공시 후 4초 지연을 두고 최후 변론 단계로 전환
     setTimeout(() => {
       startDefensePhase(roomId)
-    }, 6000) // 6초 지연
+    }, 4000)
   } else {
     // 동점이거나 투표가 없는 경우
     const reason = tie ? "동점으로 지목 무효" : "투표가 없어 지목 무효"
@@ -517,10 +517,10 @@ function processNominationResult(roomId) {
       tie ? "동점으로 지목이 무효되었습니다. 밤이 찾아옵니다." : "투표가 없어 지목이 무효되었습니다. 밤이 찾아옵니다.",
     )
 
-    // 중요 변경: 결과 공시 후 6초 지연을 두고 밤 페이즈로 전환
+    // 결과 공시 후 4초 지연을 두고 밤 페이즈로 전환
     setTimeout(() => {
       startNightPhase(roomId)
-    }, 6000) // 6초 지연
+    }, 4000)
   }
 }
 
@@ -836,7 +836,7 @@ function handleAiNightActions(roomId) {
   }
 }
 
-// 밤 페이즈 종료 함수 수정 - 플레이어 사망 처리 강화
+// 밤 페이즈 종료 함수 수정 - 밤 결과 이벤트 확실히 전송
 function endNightPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -845,6 +845,9 @@ function endNightPhase(roomId) {
   console.log(`[${roomId}] Mafia target: ${room.mafiaTarget}`)
   console.log(`[${roomId}] Players before night kill:`)
   logRoomInfo(roomId)
+
+  let killedPlayerNickname = null
+  let noVictim = true
 
   // 마피아 타겟 처리
   if (room.mafiaTarget) {
@@ -856,10 +859,10 @@ function endNightPhase(roomId) {
 
       // 플레이어 사망 처리
       targetPlayer.isAlive = false
+      killedPlayerNickname = targetPlayer.nickname
+      noVictim = false
 
       console.log(`[${roomId}] Player ${targetPlayer.nickname} is now DEAD`)
-
-      io.to(roomId).emit("systemMessage", `${room.day}일차 밤, 마피아가 ${targetPlayer.nickname}님을 제거했습니다.`)
 
       // 중요: 플레이어 상태 업데이트 이벤트 명시적 전송 (사망 상태 전파)
       console.log(`[${roomId}] Sending players update after night kill`)
@@ -876,14 +879,24 @@ function endNightPhase(roomId) {
     }
   } else {
     console.log(`[${roomId}] No mafia target selected`)
-    io.to(roomId).emit("systemMessage", "마피아가 아무도 제거하지 않았습니다.")
   }
 
   console.log(`[${roomId}] Players after night kill:`)
   logRoomInfo(roomId)
 
-  // 다음 날로 진행
-  startDayPhase(roomId, room.day + 1)
+  // 중요: 밤 활동 결과 이벤트 확실히 전송
+  console.log(`[${roomId}] Sending nightActivityResult event`)
+  io.to(roomId).emit("nightActivityResult", {
+    killedPlayerNickname,
+    noVictim,
+    day: room.day + 1,
+  })
+
+  // 5초 지연 후 다음 날로 진행 (결과 팝업 표시 시간 확보)
+  setTimeout(() => {
+    console.log(`[${roomId}] Starting next day after night result display`)
+    startDayPhase(roomId, room.day + 1)
+  }, 5000) // 5초로 증가하여 팝업 표시 시간 확보
 }
 
 // 게임 종료 조건 확인 함수
@@ -1201,6 +1214,7 @@ io.on("connection", (socket) => {
       }
     }
 
+    // 모든  {
     // 모든 AI 캐릭터가 사용 중이면 숫자 붙이기
     if (!aiCharacter) {
       const randomNum = Math.floor(Math.random() * 1000)

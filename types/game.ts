@@ -35,3 +35,13 @@ export interface NominationResult {
   tie: boolean
   reason: string
 }
+
+// 밤 활동 결과 타입 추가
+export interface NightActivityResult {
+  killedPlayerNickname: string | null
+  noVictim: boolean
+  day: number
+}
+
+// 페이즈 전환 타입 확장
+export type PhaseTransitionType = "dayStart" | "nightStart" | "nightResult"

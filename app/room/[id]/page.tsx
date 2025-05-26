@@ -11,6 +11,7 @@ import type { Player, GameState, DaySubPhase, VoteResult, NominationResult } fro
 import { Button } from "@/components/ui/button"
 import { AlertCircle, RefreshCw, ArrowLeft } from "lucide-react"
 import { useTheme } from "next-themes"
+import { PhaseTransitionModal } from "@/components/phase-transition-modal"
 
 export default function RoomPage() {
   const params = useParams()
@@ -32,6 +33,14 @@ export default function RoomPage() {
   const [voteResult, setVoteResult] = useState<VoteResult | null>(null)
   const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+
+  // 의심 지목 투표 흐름 개선을 위한 상태 추가
+  // 의심 지목 투표 완료 상태 추적 강화
+  const [hasVotedInNomination, setHasVotedInNomination] = useState(false)
+  const [nightActivityResult, setNightActivityResult] = useState<any>(null)
+  const [showNightResultModal, setShowNightResultModal] = useState(false)
+  const [showNominationModal, setShowNominationModal] = useState(false)
+  const [isNominationVoteSubmitted, setIsNominationVoteSubmitted] = useState(false)
 
   const eventListenersSetupRef = useRef(false)
 
@@ -135,7 +144,12 @@ export default function RoomPage() {
       message?: string
     }) => {
       console.log("Received phase change:", data)
-      console.log(`서버에서 받은 timeLeft: ${data.timeLeft}초`)
+
+      // 새로운 페이즈/서브페이즈로 변경될 때 투표 상태 리셋
+      if (data.subPhase !== subPhase) {
+        setHasVotedInNomination(false)
+        console.log("Phase changed, resetting nomination vote status")
+      }
 
       setPhase(data.phase)
       setSubPhase(data.subPhase || null)
@@ -157,7 +171,7 @@ export default function RoomPage() {
         setVoteResult(data.voteResult)
       }
     },
-    [],
+    [subPhase], // 의존성 배열에 subPhase 추가
   )
 
   // 시간 업데이트 핸들러
@@ -172,10 +186,11 @@ export default function RoomPage() {
     }
   }, [])
 
-  // 지목 결과 핸들러
+  // 의심 지목 결과 핸들러 수정
   const handleNominationResult = useCallback((data: NominationResult) => {
     console.log("Received nomination result:", data)
     setNominationResult(data)
+    setIsNominationVoteSubmitted(false) // 결과 받으면 투표 제출 상태 리셋
   }, [])
 
   // 처형 결과 핸들러
@@ -188,6 +203,20 @@ export default function RoomPage() {
   const handleJoinRoomError = useCallback((data: { type: string; message: string }) => {
     console.log("Received join room error:", data)
     setJoinError(data.message)
+  }, [])
+
+  // 밤 활동 결과 핸들러 추가
+  // 밤 활동 결과 핸들러 수정
+  const handleNightActivityResult = useCallback((data: any) => {
+    console.log("Received night activity result:", data)
+    setNightActivityResult(data)
+    setShowNightResultModal(true)
+
+    // 5초 후 자동으로 모달 닫기
+    setTimeout(() => {
+      setShowNightResultModal(false)
+      setNightActivityResult(null)
+    }, 5000)
   }, [])
 
   // 소켓 연결 및 방 참가 로직
@@ -220,6 +249,7 @@ export default function RoomPage() {
     socket.on("nominationVoteResult", handleNominationResult)
     socket.on("executionResult", handleExecutionResult)
     socket.on("joinRoomError", handleJoinRoomError)
+    socket.on("nightActivityResult", handleNightActivityResult) // 새로운 이벤트 리스너
     socket.on("systemMessage", (message: string) => {
       console.log("System message:", message)
     })
@@ -236,6 +266,7 @@ export default function RoomPage() {
       socket.off("nominationVoteResult", handleNominationResult)
       socket.off("executionResult", handleExecutionResult)
       socket.off("joinRoomError", handleJoinRoomError)
+      socket.off("nightActivityResult", handleNightActivityResult) // 새로운 이벤트 리스너 제거
       socket.off("systemMessage")
       eventListenersSetupRef.current = false
     }
@@ -249,6 +280,7 @@ export default function RoomPage() {
     handleNominationResult,
     handleExecutionResult,
     handleJoinRoomError,
+    handleNightActivityResult, // 의존성 배열에 추가
   ])
 
   // Handle disconnection
@@ -365,22 +397,55 @@ export default function RoomPage() {
     return <RoleReveal role={role} />
   }
 
+  // 의심 지목 투표 핸들러 수정
+  const handleNominationVote = (target: string | null) => {
+    if (!socket || !players.find((player) => player.nickname === nickname)?.isAlive || hasVotedInNomination) {
+      console.log("Cannot vote: socket missing, player dead, or already voted")
+      return
+    }
+
+    console.log("Submitting nomination vote for:", target)
+    setHasVotedInNomination(true) // 투표 완료 상태 설정
+
+    socket.emit("submitNominationVote", {
+      roomId,
+      target,
+    })
+  }
+
+  // 렌더링 부분에 밤 결과 모달 추가
   if (gameState === "playing") {
     console.log("Rendering GameRoom with players:", players)
     return (
-      <GameRoom
-        players={players || []} // 방어 코드 추가: players가 undefined일 경우 빈 배열 전달
-        role={role}
-        day={day}
-        phase={phase}
-        subPhase={subPhase}
-        socket={socket}
-        roomId={roomId}
-        nickname={nickname}
-        timeLeft={timeLeft}
-        nominatedPlayer={nominatedPlayer}
-        voteResult={voteResult}
-      />
+      <>
+        <GameRoom
+          players={players || []}
+          role={role}
+          day={day}
+          phase={phase}
+          subPhase={subPhase}
+          socket={socket}
+          roomId={roomId}
+          nickname={nickname}
+          timeLeft={timeLeft}
+          nominatedPlayer={nominatedPlayer}
+          voteResult={voteResult}
+        />
+
+        {/* 밤 결과 모달 추가 */}
+        {showNightResultModal && nightActivityResult && (
+          <PhaseTransitionModal
+            type="nightResult"
+            message={
+              nightActivityResult.noVictim
+                ? "어젯밤은 평화로웠습니다. 아무도 죽지 않았습니다."
+                : `어젯밤, ${nightActivityResult.killedPlayerNickname}님이 마피아에게 살해당했습니다.`
+            }
+            onClose={() => setShowNightResultModal(false)}
+            nightResult={nightActivityResult}
+          />
+        )}
+      </>
     )
   }
 

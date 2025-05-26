@@ -793,7 +793,7 @@ export function GameRoom({
         </div>
       </div>
 
-      {/* 모바일 레이아웃 (md 미만) - 채팅창 높이 50% 축소 */}
+      {/* 모바일 레이아웃 (md 미만) - 중복 플레이어 목록 제거 */}
       <div className="md:hidden flex flex-col h-screen">
         {/* 상단 고정 정보 영역 */}
         <div className="bg-background border-b border-border p-3 space-y-2">
@@ -941,39 +941,7 @@ export function GameRoom({
         </div>
 
         {/* 나머지 공간 - 플레이어 상세 정보나 게임 상태 표시 */}
-        <div className="flex-1 bg-secondary/20 p-3 overflow-y-auto">
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium">
-              생존자 ({alivePlayers.length}/{players.length})
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {players.map((player) => {
-                const playerDisplay = getPlayerDisplay(player)
-                return (
-                  <div
-                    key={player.id}
-                    className={`flex items-center p-2 rounded-md text-xs ${
-                      player.isAlive
-                        ? "bg-background"
-                        : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 grayscale opacity-70"
-                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
-                  >
-                    <span className={`text-sm mr-2 ${!player.isAlive ? "grayscale" : ""}`}>{playerDisplay.emoji}</span>
-                    <div className="flex-1">
-                      <span className={player.isAlive ? "" : "line-through text-red-400"}>
-                        {playerDisplay.name.length > 8
-                          ? playerDisplay.name.substring(0, 8) + "..."
-                          : playerDisplay.name}
-                      </span>
-                      {player.nickname === nickname && <span className="ml-1 text-primary">(나)</span>}
-                      {!player.isAlive && <div className="text-xs text-red-500">사망</div>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+        <div className="flex-1 bg-secondary/20 p-3 overflow-y-auto" />
       </div>
 
       {/* 모달들 */}
