@@ -537,7 +537,7 @@ function startExecutionVotePhase(roomId) {
   if (!room || !room.nominatedPlayer) return
 
   room.subPhase = "execution" // 처형 투표 단계
-  const executionTime = 3 // 3초로 설정
+  const executionTime = 10 // 10초로 설정
 
   console.log(`Room ${roomId}: 처형 투표 단계 시작, 시간: ${executionTime}초`)
 
@@ -887,6 +887,12 @@ function endGame(roomId, winner) {
     `[Game Over] Players:`,
     room.players.map((p) => `${p.nickname} (${p.role})`),
   )
+
+  // At the end of the endGame function:
+  if (rooms.has(roomId)) {
+    rooms.delete(roomId);
+    console.log(`Room ${roomId} has been deleted after game over.`);
+  }
 }
 
 // 방 상태 정보 요청 이벤트 핸들러 추가
@@ -1243,7 +1249,93 @@ io.on("connection", (socket) => {
   // 연결 해제 처리
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`)
+    handlePlayerDeparture(socket.id)
   })
+
+  // leaveRoom 이벤트 핸들러 추가
+  socket.on("leaveRoom", ({ roomId }) => {
+    // roomId는 클라이언트에서 제공하지만, 실제 처리는 socket.id를 기준으로 함
+    console.log(`User ${socket.id} requested to leave room ${roomId}`)
+    handlePlayerDeparture(socket.id)
+  })
+
+  socket.on("sendMessage", ({ roomId, sender, content, isMafiaChat }) => {
+    const room = rooms.get(roomId);
+    if (!room) {
+      console.error(`sendMessage: Room ${roomId} not found.`);
+      return;
+    }
+
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) {
+      console.error(`sendMessage: Player with socket.id ${socket.id} not found in room ${roomId}.`);
+      return;
+    }
+
+    if (player.nickname !== sender) {
+      console.warn(`sendMessage: Sender mismatch. socket.id ${socket.id} claimed to be ${sender} but is ${player.nickname}.`);
+      // Optionally, send an error to the sender or simply ignore. For now, ignore.
+      return;
+    }
+
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      // Ignore empty messages
+      return;
+    }
+
+    // Server-side authorization for chat
+    let canPlayerChat = false;
+    if (player.isAlive) {
+      if (isMafiaChat) {
+        if (room.phase === "night" && player.role === "mafia") {
+          canPlayerChat = true;
+        }
+      } else { // Public chat
+        if (room.phase === "day") {
+          if (room.subPhase === "defense") {
+            if (player.nickname === room.nominatedPlayer) {
+              canPlayerChat = true;
+            }
+          } else {
+            // Any other day sub-phase allows chat (discussion, nomination, execution, result)
+            // Note: Client-side `canChat` is more restrictive for nomination/execution/result,
+            // but server allows it here for simplicity. If stricter server-side needed, add more checks.
+            // For now, aligning with basic day chat and defense speaker.
+            // Let's refine to: only discussion, or defense by nominated.
+             if (room.subPhase === 'discussion' || (room.subPhase === 'defense' && player.nickname === room.nominatedPlayer)) {
+              canPlayerChat = true;
+             }
+          }
+        }
+      }
+    }
+
+    if (!canPlayerChat) {
+      console.log(`sendMessage: Player ${sender} (${socket.id}) in room ${roomId} is not allowed to chat in the current state (isAlive: ${player.isAlive}, room.phase: ${room.phase}, room.subPhase: ${room.subPhase}, player.role: ${player.role}, isMafiaChat: ${isMafiaChat}).`);
+      // Optionally send error to sender, for now, just log and ignore.
+      return;
+    }
+
+    const messageData = {
+      sender: player.nickname, // Use server-verified nickname
+      content: trimmedContent,
+      timestamp: new Date().toISOString(),
+      isMafiaChat: !!isMafiaChat, // Ensure boolean
+    };
+
+    if (isMafiaChat) {
+      console.log(`Broadcasting mafia chat message from ${player.nickname} in room ${roomId}`);
+      room.players.forEach(p => {
+        if (p.role === "mafia" && p.isAlive) {
+          io.to(p.id).emit("chatMessage", messageData);
+        }
+      });
+    } else {
+      console.log(`Broadcasting public chat message from ${player.nickname} in room ${roomId}`);
+      io.to(roomId).emit("chatMessage", messageData);
+    }
+  });
 
   // startGame 이벤트 핸들러 수정 (AI 플레이어 처리 확인)
   socket.on("startGame", ({ roomId }) => {
@@ -1355,3 +1447,123 @@ server.listen(PORT, () => {
     console.log(`Railway URL: ${RAILWAY_URL}`)
   }
 })
+
+// Helper function to find a room by socket ID
+function findRoomBySocketId(socketId) {
+  for (const room of rooms.values()) {
+    const player = room.players.find((p) => p.id === socketId)
+    if (player) {
+      return room
+    }
+  }
+  return null
+}
+
+// Function to handle player departure (leave or disconnect)
+function handlePlayerDeparture(socketId) {
+  const room = findRoomBySocketId(socketId)
+  if (!room) {
+    console.log(`Player with socketId ${socketId} not found in any room.`)
+    return
+  }
+
+  const playerIndex = room.players.findIndex((p) => p.id === socketId)
+  if (playerIndex === -1) {
+    console.log(`Player with socketId ${socketId} not found in room ${room.id}, though room was found.`)
+    return
+  }
+
+  const departingPlayer = room.players[playerIndex]
+  const { nickname, isHost: isHostLeaving } = departingPlayer
+
+  // Remove player from room
+  room.players.splice(playerIndex, 1)
+  console.log(`Player ${nickname} (${socketId}) left room ${room.id}.`)
+
+  // If room is now empty, delete it
+  if (room.players.length === 0) {
+    console.log(`Room ${room.id} is now empty. Scheduling for cleanup.`)
+    if (room.timer) {
+      clearInterval(room.timer)
+      room.timer = null
+      console.log(`Cleared timer for room ${room.id}.`)
+    }
+    rooms.delete(room.id)
+    console.log(`Room ${room.id} has been deleted.`)
+    // No further actions needed for an empty room
+    return
+  }
+
+  // Handle based on room state
+  if (room.state === "waiting") {
+    io.to(room.id).emit(
+      "playersUpdate",
+      room.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        isHost: p.isHost,
+        isAlive: p.isAlive,
+        isAi: p.isAi,
+      })),
+    )
+    io.to(room.id).emit(
+      "takenCharacters",
+      room.players.map((p) => p.nickname),
+    )
+
+    if (isHostLeaving && room.players.length > 0) {
+      room.players[0].isHost = true
+      const newHostNickname = room.players[0].nickname
+      io.to(room.id).emit("systemMessage", `${newHostNickname} is now the host.`)
+      io.to(room.id).emit(
+        "playersUpdate",
+        room.players.map((p) => ({
+          id: p.id,
+          nickname: p.nickname,
+          isHost: p.isHost,
+          isAlive: p.isAlive,
+          isAi: p.isAi,
+        })),
+      )
+      console.log(`${newHostNickname} is now the host in room ${room.id}.`)
+    }
+  } else if (room.state === "playing" || room.state === "roleReveal") {
+    // Conceptually, the player is marked as not alive by being removed.
+    // Ensure player list is updated for all clients
+    io.to(room.id).emit(
+      "playersUpdate",
+      room.players.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        isHost: p.isHost,
+        isAlive: p.isAlive, // This will reflect actual alive status for remaining players
+        isAi: p.isAi,
+      })),
+    )
+    io.to(room.id).emit("systemMessage", `${nickname} has left the game.`)
+
+    // Check if game ends
+    const gameResult = checkGameEnd(room)
+    if (gameResult) {
+      endGame(room.id, gameResult)
+    } else if (isHostLeaving && room.players.length > 0 && room.state !== "gameOver") {
+      // Assign new host if the leaving player was host and game is not over
+      room.players[0].isHost = true
+      const newHostNickname = room.players[0].nickname
+      io.to(room.id).emit("systemMessage", `${newHostNickname} is now the host.`)
+      io.to(room.id).emit(
+        "playersUpdate",
+        room.players.map((p) => ({
+          id: p.id,
+          nickname: p.nickname,
+          isHost: p.isHost,
+          isAlive: p.isAlive,
+          isAi: p.isAi,
+        })),
+      )
+      console.log(`${newHostNickname} is now the host in room ${room.id} during game.`)
+    }
+  }
+  // Log room info after departure handling
+  logRoomInfo(room.id)
+}
