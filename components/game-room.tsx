@@ -100,11 +100,42 @@ export function GameRoom({
 
   const isAlive = currentPlayer?.isAlive ?? true
   const isMafia = role === "mafia"
-  const canChat =
-    isAlive &&
-    ((phaseState === "day" && subPhaseState !== "defense") || // 낮에는 최후 변론 단계가 아니면 채팅 가능
-      (phaseState === "day" && subPhaseState === "defense" && nickname === nominatedPlayerState) || // 최후 변론 단계에서는 지목된 플레이어만 채팅 가능
-      (phaseState === "night" && isMafia)) // 밤에는 마피아만 채팅 가능
+
+  // 채팅 가능 조건 수정 - 더 정확한 로직 적용
+  const canChat = (() => {
+    // 사망한 플레이어는 채팅 불가
+    if (!isAlive) {
+      console.log(`[Chat] ${nickname} cannot chat: DEAD`)
+      return false
+    }
+
+    // 밤 페이즈
+    if (phaseState === "night") {
+      // 마피아만 채팅 가능
+      const canChatAtNight = isMafia
+      console.log(`[Chat] ${nickname} night chat: ${canChatAtNight ? "ALLOWED (Mafia)" : "BLOCKED (Not Mafia)"}`)
+      return canChatAtNight
+    }
+
+    // 낮 페이즈
+    if (phaseState === "day") {
+      // 최후 변론 단계에서는 지목된 플레이어만 채팅 가능
+      if (subPhaseState === "defense") {
+        const canChatInDefense = nickname === nominatedPlayerState
+        console.log(
+          `[Chat] ${nickname} defense chat: ${canChatInDefense ? "ALLOWED (Nominated)" : "BLOCKED (Not Nominated)"}`,
+        )
+        return canChatInDefense
+      }
+
+      // 다른 낮 단계에서는 모든 살아있는 플레이어가 채팅 가능
+      console.log(`[Chat] ${nickname} day chat: ALLOWED`)
+      return true
+    }
+
+    console.log(`[Chat] ${nickname} unknown phase: BLOCKED`)
+    return false
+  })()
 
   // Get alive players
   const alivePlayers = players.filter((p) => p.isAlive)
@@ -319,7 +350,12 @@ export function GameRoom({
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!message.trim() || !canChat) return
+    if (!message.trim() || !canChat) {
+      console.log(`[Chat] ${nickname} message blocked: canChat=${canChat}, message="${message.trim()}"`)
+      return
+    }
+
+    console.log(`[Chat] ${nickname} sending message: "${message}" (mafia: ${phaseState === "night" && isMafia})`)
 
     if (isOfflineMode && offlineGame) {
       offlineGame.sendMessage(message, phaseState === "night" && isMafia)
@@ -448,6 +484,34 @@ export function GameRoom({
     }
 
     return ""
+  }
+
+  // 채팅 입력창 플레이스홀더 텍스트 개선
+  const getChatPlaceholder = () => {
+    if (!isAlive) {
+      return "사망한 플레이어는 채팅할 수 없습니다"
+    }
+
+    if (phaseState === "night") {
+      if (isMafia) {
+        return "마피아 채팅을 입력하세요"
+      } else {
+        return "밤에는 채팅할 수 없습니다"
+      }
+    }
+
+    if (phaseState === "day") {
+      if (subPhaseState === "defense") {
+        if (nickname === nominatedPlayerState) {
+          return "최후 변론을 입력하세요"
+        } else {
+          return "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다"
+        }
+      }
+      return "메시지를 입력하세요"
+    }
+
+    return "메시지를 입력하세요"
   }
 
   // 사망자 메시지 표시 함수 개선
@@ -708,15 +772,7 @@ export function GameRoom({
                 <Input
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder={
-                    !isAlive
-                      ? "사망한 플레이어는 채팅할 수 없습니다"
-                      : phaseState === "night" && !isMafia
-                        ? "밤에는 채팅할 수 없습니다"
-                        : phaseState === "day" && subPhaseState === "defense" && nickname !== nominatedPlayerState
-                          ? "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다"
-                          : "메시지를 입력하세요"
-                  }
+                  placeholder={getChatPlaceholder()}
                   disabled={!canChat}
                 />
                 <Button type="submit" disabled={!canChat}>
@@ -876,15 +932,7 @@ export function GameRoom({
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={
-                  !isAlive
-                    ? "사망한 플레이어는 채팅할 수 없습니다"
-                    : phaseState === "night" && !isMafia
-                      ? "밤에는 채팅할 수 없습니다"
-                      : phaseState === "day" && subPhaseState === "defense" && nickname !== nominatedPlayerState
-                        ? "최후 변론 중에는 지목된 플레이어만 발언할 수 있습니다"
-                        : "메시지를 입력하세요"
-                }
+                placeholder={getChatPlaceholder()}
                 disabled={!canChat}
                 className="text-base" // 모바일에서 확대 방지를 위해 font-size 16px 이상으로 설정
               />
