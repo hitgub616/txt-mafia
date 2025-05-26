@@ -565,7 +565,30 @@ export function GameRoom({
   }
 
   return (
-    <div className="flex min-h-screen flex-col theme-background">
+    <div className="flex min-h-screen flex-col theme-background relative">
+      {/* 고정 타이머 - 화면 상단 우측에 고정 */}
+      <div className="fixed top-4 right-4 z-30">
+        <div
+          className={`flex items-center px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm border-2 transition-all duration-300 ${
+            isTimerCritical
+              ? "bg-red-500/90 border-red-400 text-white animate-pulse scale-110"
+              : phaseState === "night"
+                ? "bg-blue-900/90 border-blue-600 text-blue-100"
+                : "bg-yellow-500/90 border-yellow-400 text-yellow-900"
+          }`}
+        >
+          <Clock className={`h-6 w-6 mr-2 ${isTimerCritical ? "text-white animate-spin" : ""}`} />
+          <div className="flex flex-col items-center">
+            <span className={`font-mono text-xl font-bold ${isTimerCritical ? "text-white" : ""}`}>
+              {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
+            </span>
+            <span className={`text-xs ${isTimerCritical ? "text-red-100" : "opacity-80"}`}>
+              {phaseState === "day" ? "낮" : "밤"} {dayState}일차
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* 데스크톱 레이아웃 (md 이상) */}
       <div className="hidden md:grid md:grid-cols-3 gap-4 h-full p-4">
         {/* Game info and player list */}
@@ -594,20 +617,6 @@ export function GameRoom({
                                 ? "투표"
                                 : "결과"
                       })`}
-                  </span>
-                </div>
-
-                {/* 개선된 타이머 UI */}
-                <div
-                  className={`flex items-center px-3 py-1 rounded-full ${
-                    isTimerCritical
-                      ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse"
-                      : "bg-secondary/50"
-                  }`}
-                >
-                  <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
-                  <span className={`font-mono ${isTimerCritical ? "font-bold text-red-600 dark:text-red-400" : ""}`}>
-                    {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
                   </span>
                 </div>
               </div>
@@ -642,14 +651,14 @@ export function GameRoom({
               <h3 className="text-sm font-medium mb-2">
                 생존자 ({alivePlayers.length}/{players.length})
               </h3>
-              {/* 플레이어 목록 렌더링 부분 수정 - 사망자 표시 개선 */}
-              <div className="space-y-2">
+              {/* 플레이어 목록 렌더링 부분 수정 - 높이 조정 및 간격 개선 */}
+              <div className="space-y-1.5">
                 {players.map((player) => {
                   const playerDisplay = getPlayerDisplay(player)
                   return (
                     <div
                       key={player.id}
-                      className={`flex items-center justify-between p-2 rounded-md ${
+                      className={`flex items-center justify-between p-2 rounded-md min-h-[3rem] ${
                         player.isAlive
                           ? "bg-secondary"
                           : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-300/20 grayscale opacity-70"
@@ -699,11 +708,11 @@ export function GameRoom({
               {isMafia && mafiaPlayers.length > 0 && (
                 <div className="mt-4">
                   <h3 className="text-sm font-medium mb-2 text-red-500">마피아 팀</h3>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {mafiaPlayers.map((player) => {
                       const playerDisplay = getPlayerDisplay(player)
                       return (
-                        <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30">
+                        <div key={player.id} className="flex items-center p-2 rounded-md bg-red-900/30 min-h-[2.5rem]">
                           <span className="text-lg mr-2">{playerDisplay.emoji}</span>
                           <span>{playerDisplay.name}</span>
                         </div>
@@ -784,7 +793,7 @@ export function GameRoom({
         </div>
       </div>
 
-      {/* 모바일 레이아웃 (md 미만) */}
+      {/* 모바일 레이아웃 (md 미만) - 채팅창 높이 50% 축소 */}
       <div className="md:hidden flex flex-col h-screen">
         {/* 상단 고정 정보 영역 */}
         <div className="bg-background border-b border-border p-3 space-y-2">
@@ -814,18 +823,10 @@ export function GameRoom({
               </span>
             </div>
 
-            <div
-              className={`flex items-center px-2 py-1 rounded-full text-xs ${
-                isTimerCritical
-                  ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse"
-                  : "bg-secondary/50"
-              }`}
-            >
-              <Clock className={`h-3 w-3 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
-              <span className={`font-mono ${isTimerCritical ? "font-bold" : ""}`}>
-                {Math.floor(localTimeLeft / 60)}:{(localTimeLeft % 60).toString().padStart(2, "0")}
-              </span>
-            </div>
+            <Button variant="ghost" size="sm" onClick={handleLeaveRoom} className="h-6 px-2 text-xs text-red-500">
+              <LogOut className="h-3 w-3 mr-1" />
+              나가기
+            </Button>
           </div>
 
           {/* 내 역할 및 상태 */}
@@ -837,10 +838,6 @@ export function GameRoom({
               </span>
               {!isAlive && <span className="ml-1 text-red-500">(사망)</span>}
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLeaveRoom} className="h-6 px-2 text-xs text-red-500">
-              <LogOut className="h-3 w-3 mr-1" />
-              나가기
-            </Button>
           </div>
 
           {/* 지목된 플레이어 표시 */}
@@ -853,7 +850,7 @@ export function GameRoom({
           )}
         </div>
 
-        {/* 플레이어 목록 (가로 스크롤) */}
+        {/* 플레이어 목록 (가로 스크롤) - 높이 조정 */}
         <div className="bg-background border-b border-border p-2">
           <div className="flex space-x-2 overflow-x-auto pb-1 px-1">
             {players.map((player) => {
@@ -861,19 +858,19 @@ export function GameRoom({
               return (
                 <div
                   key={player.id}
-                  className={`flex-shrink-0 flex flex-col items-center p-2 rounded-lg min-w-[60px] max-w-[70px] ${
+                  className={`flex-shrink-0 flex flex-col items-center p-1.5 rounded-lg min-w-[55px] max-w-[65px] min-h-[4rem] ${
                     player.isAlive ? "bg-secondary" : "bg-gray-200 dark:bg-gray-800/50 grayscale opacity-50"
                   } ${player.nickname === nickname ? "ring-2 ring-primary" : ""}`}
                 >
                   <div className="relative">
-                    <span className={`text-lg ${!player.isAlive ? "grayscale" : ""}`}>{playerDisplay.emoji}</span>
+                    <span className={`text-base ${!player.isAlive ? "grayscale" : ""}`}>{playerDisplay.emoji}</span>
                     {!player.isAlive && <Skull className="absolute -top-1 -right-1 h-3 w-3 text-red-500" />}
                     {isMafia && player.role === "mafia" && player.isAlive && (
                       <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
                     )}
                   </div>
                   <span className={`text-xs text-center mt-1 ${!player.isAlive ? "line-through text-red-400" : ""}`}>
-                    {playerDisplay.name}
+                    {playerDisplay.name.length > 6 ? playerDisplay.name.substring(0, 6) + "..." : playerDisplay.name}
                   </span>
                   {player.nickname === nickname && <span className="text-xs text-primary font-bold">나</span>}
                 </div>
@@ -882,8 +879,8 @@ export function GameRoom({
           </div>
         </div>
 
-        {/* 채팅 영역 - 모바일 환경 개선 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 채팅 영역 - 모바일 환경 개선 (높이 50% 축소) */}
+        <div className="flex-1 flex flex-col overflow-hidden max-h-[40vh]">
           <div className="flex-1 overflow-hidden">
             <ScrollArea className="h-full p-3">
               <div className="space-y-1">
@@ -942,6 +939,41 @@ export function GameRoom({
             </form>
           </div>
         </div>
+
+        {/* 나머지 공간 - 플레이어 상세 정보나 게임 상태 표시 */}
+        <div className="flex-1 bg-secondary/20 p-3 overflow-y-auto">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">
+              생존자 ({alivePlayers.length}/{players.length})
+            </h3>
+            <div className="grid grid-cols-2 gap-2">
+              {players.map((player) => {
+                const playerDisplay = getPlayerDisplay(player)
+                return (
+                  <div
+                    key={player.id}
+                    className={`flex items-center p-2 rounded-md text-xs ${
+                      player.isAlive
+                        ? "bg-background"
+                        : "bg-gray-200 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 grayscale opacity-70"
+                    } ${player.nickname === nickname ? "border border-primary/50" : ""}`}
+                  >
+                    <span className={`text-sm mr-2 ${!player.isAlive ? "grayscale" : ""}`}>{playerDisplay.emoji}</span>
+                    <div className="flex-1">
+                      <span className={player.isAlive ? "" : "line-through text-red-400"}>
+                        {playerDisplay.name.length > 8
+                          ? playerDisplay.name.substring(0, 8) + "..."
+                          : playerDisplay.name}
+                      </span>
+                      {player.nickname === nickname && <span className="ml-1 text-primary">(나)</span>}
+                      {!player.isAlive && <div className="text-xs text-red-500">사망</div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 모달들 */}
@@ -963,6 +995,7 @@ export function GameRoom({
           onVote={handleExecutionVote}
           onClose={() => setShowExecutionModal(false)}
           players={players}
+          voteResult={voteResultState} // 투표 결과 전달
         />
       )}
 

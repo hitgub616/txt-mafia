@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, ThumbsUp, ThumbsDown, AlertCircle, Skull } from "lucide-react"
+import { Clock, ThumbsUp, ThumbsDown, AlertCircle, Skull, Check, X, Loader2 } from "lucide-react"
+import type { VoteResult } from "@/types/game"
 
 interface ExecutionVoteModalProps {
   nominatedPlayer: string
@@ -11,7 +12,8 @@ interface ExecutionVoteModalProps {
   currentPlayerNickname: string
   onVote: (vote: "yes" | "no" | null) => void
   onClose: () => void
-  players?: { nickname: string; isAlive: boolean }[] // players를 선택적으로 변경
+  players?: { nickname: string; isAlive: boolean }[]
+  voteResult?: VoteResult | null // 투표 결과 prop 추가
 }
 
 export function ExecutionVoteModal({
@@ -20,15 +22,19 @@ export function ExecutionVoteModal({
   currentPlayerNickname,
   onVote,
   onClose,
-  players = [], // 기본값으로 빈 배열 제공
+  players = [],
+  voteResult = null, // 투표 결과
 }: ExecutionVoteModalProps) {
   const [vote, setVote] = useState<"yes" | "no" | null>(null)
   const [isVoted, setIsVoted] = useState(false)
+  const [isLoading, setIsLoading] = useState(false) // 로딩 상태 추가
+  const [showResult, setShowResult] = useState(false) // 결과 표시 상태
   const [isExiting, setIsExiting] = useState(false)
   const [animateVote, setAnimateVote] = useState<"yes" | "no" | null>(null)
+  const [resultTimer, setResultTimer] = useState(10) // 결과 표시 타이머
   const modalRef = useRef<HTMLDivElement>(null)
   const maxTime = 3 // 최대 시간 (초)
-  const initialRender = useRef(true) // useRef를 컴포넌트 스코프에서 정의
+  const initialRender = useRef(true)
   const handleCloseRef = useRef(onClose)
 
   // 현재 플레이어가 지목된 플레이어인지 확인 (사망자 처리 로직 강화)
@@ -41,14 +47,42 @@ export function ExecutionVoteModal({
       : false
 
   // 사망자 또는 지목된 플레이어는 투표할 수 없음
-  const canVote = !isNominated && !isPlayerDead
+  const canVote = !isNominated && !isPlayerDead && !isVoted && !isLoading && !showResult
+
+  // 투표 결과가 도착했을 때 결과 표시 모드로 전환
+  useEffect(() => {
+    if (voteResult && isVoted && !showResult) {
+      console.log("Vote result received, showing result:", voteResult)
+      setIsLoading(false)
+      setShowResult(true)
+      setResultTimer(10) // 10초 동안 결과 표시
+    }
+  }, [voteResult, isVoted, showResult])
+
+  // 결과 표시 타이머
+  useEffect(() => {
+    if (showResult && resultTimer > 0) {
+      const timer = setInterval(() => {
+        setResultTimer((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer)
+            handleClose()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+
+      return () => clearInterval(timer)
+    }
+  }, [showResult, resultTimer])
 
   // 모달 닫기 (애니메이션 포함)
   const handleClose = useCallback(() => {
     setIsExiting(true)
     setTimeout(() => {
       handleCloseRef.current()
-    }, 200) // 애니메이션 시간과 일치시킴
+    }, 200)
   }, [])
 
   useEffect(() => {
@@ -57,41 +91,36 @@ export function ExecutionVoteModal({
 
   // 투표 제출 함수를 useCallback으로 메모이제이션
   const handleSubmit = useCallback(() => {
-    if (isVoted || isNominated) return
+    if (isVoted || isNominated || isLoading || showResult) return
 
     setIsVoted(true)
+    setIsLoading(true) // 로딩 상태 시작
     onVote(vote)
 
-    // 투표 후 모달 닫기 (약간의 지연 후)
-    setTimeout(() => {
-      handleClose()
-    }, 500)
-  }, [vote, isVoted, isNominated, onVote, handleClose])
+    console.log("Vote submitted, waiting for result...")
+  }, [vote, isVoted, isNominated, isLoading, showResult, onVote])
 
   // 타이머가 끝나면 자동으로 투표 처리
   useEffect(() => {
-    // 초기 렌더링 시 timeLeft가 0이면 무시하도록 ref 사용
     if (initialRender.current) {
       initialRender.current = false
-      // 초기 렌더링 시 timeLeft가 이미 0이면 무시
       if (timeLeft <= 0) return
     }
 
-    if (timeLeft <= 0 && !isVoted && !isNominated) {
+    if (timeLeft <= 0 && !isVoted && !isNominated && !showResult) {
       console.log("ExecutionVoteModal: 타이머 종료, 자동 제출")
       handleSubmit()
     }
-  }, [timeLeft, isVoted, isNominated, handleSubmit])
+  }, [timeLeft, isVoted, isNominated, showResult, handleSubmit])
 
   // 모달 클릭 이벤트 처리 - 외부 클릭 방지 수정
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-        // 투표가 완료되었거나 타이머가 0이 된 경우에만 닫기 허용
-        if (isVoted || timeLeft <= 0 || isNominated) {
+        // 결과 표시 중이거나 투표가 완료된 경우에만 닫기 허용
+        if (showResult || (isVoted && !isLoading) || timeLeft <= 0 || isNominated) {
           handleClose()
         }
-        // 그 외의 경우 무시 (외부 클릭 방지)
       }
     }
 
@@ -99,10 +128,12 @@ export function ExecutionVoteModal({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [isVoted, timeLeft, isNominated, handleClose])
+  }, [isVoted, timeLeft, isNominated, isLoading, showResult, handleClose])
 
   // 투표 선택 처리
   const handleVoteSelect = (selectedVote: "yes" | "no") => {
+    if (isVoted || isLoading || showResult) return
+
     // 이미 선택된 투표를 다시 클릭하면 선택 취소
     if (vote === selectedVote) {
       setVote(null)
@@ -150,36 +181,174 @@ export function ExecutionVoteModal({
   return (
     <div
       className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 ${isExiting ? "fade-out" : "fade-in"}`}
-      // 배경 클릭 이벤트 방지 (이벤트 버블링 차단)
       onClick={(e) => e.stopPropagation()}
     >
       <div ref={modalRef} className={`w-full max-w-md ${isExiting ? "modal-exit" : "modal-enter"}`}>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>처형 투표</span>
-              <div
-                className={`flex items-center text-sm font-normal px-2 py-1 rounded-full ${
-                  isTimerCritical ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse" : ""
-                }`}
-              >
-                <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
-                <span className={isTimerCritical ? "font-bold" : ""}>{timeLeft}초</span>
-              </div>
+              <span>{showResult ? "투표 결과" : "처형 투표"}</span>
+              {!showResult && (
+                <div
+                  className={`flex items-center text-sm font-normal px-2 py-1 rounded-full ${
+                    isTimerCritical ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 animate-pulse" : ""
+                  }`}
+                >
+                  <Clock className={`h-4 w-4 mr-1 ${isTimerCritical ? "text-red-500" : ""}`} />
+                  <span className={isTimerCritical ? "font-bold" : ""}>{timeLeft}초</span>
+                </div>
+              )}
+              {showResult && (
+                <div className="flex items-center text-sm font-normal px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                  <Clock className="h-4 w-4 mr-1" />
+                  <span>{resultTimer}초</span>
+                </div>
+              )}
             </CardTitle>
             {/* 타이머 바 추가 */}
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-2">
-              <div
-                className="countdown-bar rounded-full"
-                style={{
-                  animationDuration: `${maxTime}s`,
-                  width: `${(timeLeft / maxTime) * 100}%`,
-                }}
-              ></div>
-            </div>
+            {!showResult && (
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 mt-2">
+                <div
+                  className="countdown-bar rounded-full"
+                  style={{
+                    animationDuration: `${maxTime}s`,
+                    width: `${(timeLeft / maxTime) * 100}%`,
+                  }}
+                ></div>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
-            {isNominated ? (
+            {showResult && voteResult ? (
+              // 투표 결과 표시
+              <div className="space-y-6">
+                {/* 처형 결과 */}
+                <div className="text-center">
+                  {voteResult.executed ? (
+                    <div className="space-y-2">
+                      <div className="text-4xl">⚰️</div>
+                      <p className="text-xl font-bold">
+                        <span className="text-red-500">{voteResult.target}</span>님이 처형되었습니다.
+                      </p>
+                      {voteResult.role && (
+                        <p className="text-sm">
+                          역할:{" "}
+                          <span
+                            className={`${
+                              voteResult.role === "mafia" ? "text-red-500 font-bold" : "text-blue-500 font-bold"
+                            } ${voteResult.role === "mafia" ? "shake" : ""}`}
+                          >
+                            {voteResult.role === "mafia" ? "마피아" : "시민"}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-4xl">🛡️</div>
+                      <p className="text-xl font-bold">
+                        <span className="text-blue-500">{voteResult.target}</span>님이 생존하였습니다.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 투표 현황 */}
+                <div>
+                  <h3 className="text-sm font-medium mb-3 text-center">투표 현황</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* 찬성 투표 */}
+                    <div>
+                      <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded-t-md">
+                        <p className="text-center font-medium text-green-700 dark:text-green-300">찬성</p>
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {voteResult.votes
+                          .filter((v) => v.vote === "yes")
+                          .map((vote) => (
+                            <div
+                              key={vote.nickname}
+                              className="flex items-center p-2 rounded-md bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/30"
+                            >
+                              <Check className="h-4 w-4 mr-2 text-green-500" />
+                              <span className="text-sm">{vote.nickname}</span>
+                            </div>
+                          ))}
+                        {voteResult.votes.filter((v) => v.vote === "yes").length === 0 && (
+                          <div className="p-2 text-sm text-muted-foreground text-center">찬성 투표 없음</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 반대 투표 */}
+                    <div>
+                      <div className="bg-red-100 dark:bg-red-900/30 p-2 rounded-t-md">
+                        <p className="text-center font-medium text-red-700 dark:text-red-300">반대</p>
+                      </div>
+                      <div className="space-y-1 mt-1">
+                        {voteResult.votes
+                          .filter((v) => v.vote === "no")
+                          .map((vote) => (
+                            <div
+                              key={vote.nickname}
+                              className="flex items-center p-2 rounded-md bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30"
+                            >
+                              <X className="h-4 w-4 mr-2 text-red-500" />
+                              <span className="text-sm">{vote.nickname}</span>
+                            </div>
+                          ))}
+                        {voteResult.votes.filter((v) => v.vote === "no").length === 0 && (
+                          <div className="p-2 text-sm text-muted-foreground text-center">반대 투표 없음</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 무고한 시민 메시지 또는 마피아 처형 성공 메시지 */}
+                {voteResult.executed && voteResult.role === "citizen" && (
+                  <div className="mt-4 p-4 bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-700 rounded-lg animate-fade-in">
+                    <div className="flex items-center justify-center mb-2">
+                      <AlertCircle className="h-6 w-6 text-blue-500 mr-2" />
+                      <span className="text-xl font-bold text-blue-600 dark:text-blue-300">무고한 희생</span>
+                    </div>
+                    <p className="text-2xl font-bold text-center text-blue-700 dark:text-blue-200 mb-2">
+                      결백한 시민이 희생되었습니다!
+                    </p>
+                    <div className="flex justify-center space-x-2 text-xl">
+                      <span>😢</span>
+                      <span>💔</span>
+                    </div>
+                  </div>
+                )}
+
+                {voteResult.executed && voteResult.role === "mafia" && (
+                  <div className="mt-4 p-4 bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-700 rounded-lg animate-fade-in">
+                    <div className="flex items-center justify-center mb-2">
+                      <AlertCircle className="h-6 w-6 text-green-500 mr-2" />
+                      <span className="text-xl font-bold text-green-600 dark:text-green-300">마피아 검거 성공!</span>
+                    </div>
+                    <p className="text-2xl font-bold text-center text-green-700 dark:text-green-200 mb-2">
+                      정의가 승리했습니다!
+                    </p>
+                    <div className="flex justify-center space-x-2 text-xl">
+                      <span>🎉</span>
+                      <span>🥳</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 자동 닫기 안내 */}
+                <div className="text-center text-sm text-muted-foreground">{resultTimer}초 후 자동으로 닫힙니다...</div>
+              </div>
+            ) : isLoading ? (
+              // 로딩 상태 표시
+              <div className="space-y-4 text-center py-8">
+                <Loader2 className="h-12 w-12 mx-auto animate-spin text-blue-500" />
+                <p className="text-lg font-medium">투표 결과를 집계하는 중입니다...</p>
+                <p className="text-sm text-muted-foreground">잠시만 기다려주세요.</p>
+              </div>
+            ) : isNominated ? (
               // 지목된 플레이어인 경우 투표 대신 기다림 메시지 표시
               <div className="space-y-4 p-4">
                 <div className="flex justify-center mb-4">
@@ -202,7 +371,7 @@ export function ExecutionVoteModal({
                     className={`h-20 vote-highlight ${vote === "yes" ? "vote-selected border-2 border-destructive" : ""} 
                       ${animateVote === "yes" ? "pulse-vote" : ""}`}
                     onClick={() => handleVoteSelect("yes")}
-                    disabled={isVoted || !canVote}
+                    disabled={!canVote}
                   >
                     <div className="flex flex-col items-center">
                       <ThumbsUp className={`h-6 w-6 mb-2 ${vote === "yes" ? "text-white" : ""}`} />
@@ -215,7 +384,7 @@ export function ExecutionVoteModal({
                     className={`h-20 vote-highlight ${vote === "no" ? "vote-selected border-2 border-primary" : ""} 
                       ${animateVote === "no" ? "pulse-vote" : ""}`}
                     onClick={() => handleVoteSelect("no")}
-                    disabled={isVoted || !canVote}
+                    disabled={!canVote}
                   >
                     <div className="flex flex-col items-center">
                       <ThumbsDown className={`h-6 w-6 mb-2 ${vote === "no" ? "text-white" : ""}`} />
@@ -227,21 +396,29 @@ export function ExecutionVoteModal({
             )}
           </CardContent>
           <CardFooter className="flex justify-between">
-            {!isNominated && (
+            {showResult ? (
+              <Button variant="outline" className="w-full" onClick={handleClose}>
+                닫기
+              </Button>
+            ) : isLoading ? (
+              <Button variant="outline" className="w-full" disabled>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                투표 처리 중...
+              </Button>
+            ) : !isNominated ? (
               <>
                 <Button variant="ghost" onClick={handleClose} disabled={isVoted || timeLeft > 0}>
                   취소
                 </Button>
                 <Button
                   onClick={handleSubmit}
-                  disabled={isVoted || !canVote}
+                  disabled={!canVote}
                   className={isVoted ? "bg-green-500 hover:bg-green-600" : ""}
                 >
                   {isVoted ? "투표 완료" : "투표하기"}
                 </Button>
               </>
-            )}
-            {isNominated && (
+            ) : (
               <Button variant="outline" className="w-full" disabled>
                 투표 결과 대기 중...
               </Button>
