@@ -56,10 +56,10 @@ export function PhaseTransitionModal({ type, message, onClose, nightResult }: Ph
 
     return (
       <Card
-        className={`text-center p-8 ${
+        className={`text-center p-8 shadow-2xl ${
           nightResult.noVictim
-            ? "bg-gradient-to-b from-green-100 to-emerald-50 dark:from-green-900/80 dark:to-emerald-900/60 border-green-300 dark:border-green-700"
-            : "bg-gradient-to-b from-red-100 to-rose-50 dark:from-red-900/80 dark:to-rose-900/60 border-red-300 dark:border-red-700"
+            ? "bg-white dark:bg-gray-800 border-2 border-green-400 dark:border-green-500"
+            : "bg-white dark:bg-gray-800 border-2 border-red-400 dark:border-red-500"
         }`}
       >
         <CardContent className="pt-6">
@@ -71,33 +71,31 @@ export function PhaseTransitionModal({ type, message, onClose, nightResult }: Ph
             )}
           </div>
 
-          <h2
-            className={`text-2xl font-bold mb-4 ${
-              nightResult.noVictim ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"
-            }`}
-          >
+          <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
             {nightResult.day}일차 아침이 밝았습니다
           </h2>
 
           <p
-            className={`text-lg mb-4 ${
+            className={`text-lg mb-4 font-semibold ${
               nightResult.noVictim ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"
-            } transition-all duration-500`}
+            }`}
           >
             {message}
           </p>
 
           {!nightResult.noVictim && (
-            <div className="mt-4 p-3 bg-red-200/80 dark:bg-red-800/60 border border-red-300 dark:border-red-600 rounded-md">
-              <p className="text-sm text-red-800 dark:text-red-200">
+            <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 border-2 border-red-300 dark:border-red-600 rounded-lg">
+              <p className="text-sm font-medium text-red-900 dark:text-red-100">
                 마피아의 희생자가 발생했습니다. 토론을 통해 마피아를 찾아내세요.
               </p>
             </div>
           )}
 
           {nightResult.noVictim && (
-            <div className="mt-4 p-3 bg-green-200/80 dark:bg-green-800/60 border border-green-300 dark:border-green-600 rounded-md">
-              <p className="text-sm text-green-800 dark:text-green-200">평화로운 밤이었습니다. 토론을 시작해주세요.</p>
+            <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 rounded-lg">
+              <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                평화로운 밤이었습니다. 토론을 시작해주세요.
+              </p>
             </div>
           )}
         </CardContent>

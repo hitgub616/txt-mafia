@@ -68,6 +68,7 @@ export function GameRoom({
   const [showNominationResultModal, setShowNominationResultModal] = useState(false)
   const [showPhaseTransitionModal, setShowPhaseTransitionModal] = useState(false)
   const [showMafiaTargetModal, setShowMafiaTargetModal] = useState(false)
+  const [showDeadPlayerModal, setShowDeadPlayerModal] = useState(false) // 사망자 모달 상태 추가
   const [localVoteResult, setLocalVoteResult] = useState<VoteResult | null>(null)
   const [nominationResult, setNominationResult] = useState<NominationResult | null>(null)
   const [phaseTransitionInfo, setPhaseTransitionInfo] = useState<{
@@ -100,6 +101,20 @@ export function GameRoom({
 
   const isAlive = currentPlayer?.isAlive ?? true
   const isMafia = role === "mafia"
+
+  // 사망자 모달 표시 로직 추가
+  useEffect(() => {
+    if (!isAlive && !showDeadPlayerModal) {
+      setShowDeadPlayerModal(true)
+
+      // 5초 후 자동으로 닫기
+      const timer = setTimeout(() => {
+        setShowDeadPlayerModal(false)
+      }, 5000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [isAlive, showDeadPlayerModal])
 
   // 채팅 가능 조건 수정 - 더 정확한 로직 적용
   const canChat = (() => {
@@ -514,9 +529,9 @@ export function GameRoom({
     return "메시지를 입력하세요"
   }
 
-  // 사망자 메시지 표시 함수 개선
+  // 사망자 메시지 표시 함수 개선 - 5초 후 자동 닫기 추가
   const renderDeadPlayerMessage = () => {
-    if (isAlive) return null
+    if (isAlive || !showDeadPlayerModal) return null
 
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-40 p-4">
@@ -527,6 +542,14 @@ export function GameRoom({
           <div className="text-sm text-gray-400">
             사망한 플레이어는 채팅, 투표 등 게임의 어떤 기능도 이용할 수 없습니다.
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 text-white border-white/30 hover:bg-white/10"
+            onClick={() => setShowDeadPlayerModal(false)}
+          >
+            확인
+          </Button>
         </div>
       </div>
     )
@@ -1002,7 +1025,7 @@ export function GameRoom({
         />
       )}
 
-      {!isAlive && renderDeadPlayerMessage()}
+      {renderDeadPlayerMessage()}
     </div>
   )
 }

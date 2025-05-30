@@ -282,7 +282,7 @@ function startTimer(roomId, duration, callback) {
   }
 }
 
-// 낮 페이즈 시작 함수 (자유 토론 단계)
+// 낮 페이즈 시작 함수 (자유 토론 단계) - 시간을 2분(120초)로 수정
 function startDayPhase(roomId, day) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -308,7 +308,7 @@ function startDayPhase(roomId, day) {
     phase: "day",
     subPhase: "discussion",
     day: room.day,
-    timeLeft: 15, // 15초로 설정
+    timeLeft: 120, // 2분으로 변경
     transitionType: "dayStart", // 페이즈 전환 타입 추가
     message: `${room.day}일차 낮이 시작되었습니다. 자유롭게 토론하세요.`,
   })
@@ -316,8 +316,8 @@ function startDayPhase(roomId, day) {
   // 시스템 메시지 전송
   io.to(roomId).emit("systemMessage", `${room.day}일차 낮이 시작되었습니다. 자유롭게 토론하세요.`)
 
-  // 타이머 시작 (15초)
-  startTimer(roomId, 15, () => {
+  // 타이머 시작 (120초)
+  startTimer(roomId, 120, () => {
     // 시간이 다 되면 의심 지목 단계로 전환
     startNominationPhase(roomId)
   })
@@ -358,13 +358,13 @@ function startDayPhase(roomId, day) {
   }
 }
 
-// 의심 지목 단계 시작 함수 수정
+// 의심 지목 단계 시작 함수 수정 - 시간을 20초로 수정
 function startNominationPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
 
   room.subPhase = "nomination" // 의심 지목 단계
-  const nominationTime = 5 // 5초로 설정
+  const nominationTime = 20 // 20초로 변경
 
   console.log(`Room ${roomId}: 의심 지목 단계 시작, 시간: ${nominationTime}초`)
 
@@ -575,13 +575,13 @@ function startDefensePhase(roomId) {
   }
 }
 
-// 처형 투표 단계 시작 함수 수정
+// 처형 투표 단계 시작 함수 수정 - 시간을 12초로 수정
 function startExecutionVotePhase(roomId) {
   const room = rooms.get(roomId)
   if (!room || !room.nominatedPlayer) return
 
   room.subPhase = "execution" // 처형 투표 단계
-  const executionTime = 3 // 3초로 설정
+  const executionTime = 12 // 12초로 변경
 
   console.log(`Room ${roomId}: 처형 투표 단계 시작, 시간: ${executionTime}초`)
 
@@ -750,7 +750,7 @@ function processExecutionResult(roomId) {
   })
 }
 
-// 밤 페이즈 시작 함수 수정
+// 밤 페이즈 시작 함수 수정 - 시간을 30초로 수정
 function startNightPhase(roomId) {
   const room = rooms.get(roomId)
   if (!room) return
@@ -758,7 +758,7 @@ function startNightPhase(roomId) {
   room.phase = "night"
   room.subPhase = null
   room.mafiaTarget = null
-  const nightTime = 15 // 15초로 설정
+  const nightTime = 30 // 30초로 변경
 
   console.log(`Room ${roomId}: 밤 페이즈 시작, 시간: ${nightTime}초`)
   console.log(`[${roomId}] Players at night start:`)
